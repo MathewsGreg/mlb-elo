@@ -31,10 +31,16 @@ To recreate it from scratch:
 
 ## Dashboard
 
-`docs/index.html` is a static, GitHub Pages–hosted dashboard: current Elo rankings
-next to an ESPN RPI comparison (rank delta highlighted), and an interactive Elo
-trajectory chart for the current season (pick one or two teams to trace; the rest
-render as gray context).
+`docs/index.html` is a static, GitHub Pages–hosted dashboard, live at
+https://mathewsgreg.github.io/mlb-elo/:
+
+- Current Elo rankings next to an ESPN RPI comparison (rank delta highlighted)
+- An interactive Elo trajectory chart for the current season (pick one or two
+  teams to trace; the rest render as gray context)
+- A runs-scored-vs-allowed-per-9 scatter, positioned by actual season output
+  and colored independently by Elo rating — a color/position mismatch (e.g. a
+  below-average-Elo team sitting in good run-differential territory) flags
+  where the model and raw run output disagree
 
 To refresh it after pulling new results:
 
@@ -72,7 +78,7 @@ then open http://localhost:8791/.
 - `docs/index.html` — static dashboard, GitHub Pages–hosted (done)
 
 The pitcher adjustment only applies to 2026 games where both starters have
-logged at least 10 innings this season (see `fip.MIN_OUTS_FOR_FIP`) — early
+logged at least 32 innings this season (see `fip.MIN_OUTS_FOR_FIP`) — early
 starts and 2023-2025 fall back to team-strength-only. `elo.PITCHER_ELO_SCALE`
 (Elo points per run of FIP gap between starters) is a documented estimate,
 not a backtested constant — worth revisiting if predictions skew.
@@ -80,4 +86,61 @@ not a backtested constant — worth revisiting if predictions skew.
 Refresh order for 2026 pitcher data: `backfill_pitchers.py` →
 `fetch_pitcher_stats.py` → `export_dashboard.py`.
 
-Next: park adjustment, then generate next-day predictions and log them against Vegas closing lines for calibration.
+Next: park adjustment; next-day predictions for unplayed games; log Vegas
+closing lines and compute Brier score to check calibration and accuracy.
+See "Roadmap" below for the concrete plan on the last two.
+
+## Roadmap: predictions, Vegas, and calibration
+
+Not built yet. Captured here so a future session can pick this up without
+re-deriving the design.
+
+**1. Predict unplayed games (`scripts/predict.py`, not yet written)**
+No blockers, buildable immediately:
+- Replay `data/mlb.db` (same as `build_ratings.py`/`export_dashboard.py`) to
+  get each team's current rating.
+- Pull an upcoming date's schedule with `hydrate=probablePitcher` (same call
+  `backfill_pitchers.py` already makes, just for a future date instead of
+  backfilling the past).
+- For each matchup, look up `fip.fip_as_of(conn, pitcher_id, today)` for both
+  starters (same no-lookahead function already used in the replay) and factor
+  in the home team's rating.
+- Compute the win probability **without** calling `EloEngine.process_game`
+  (that both predicts *and* updates ratings from a known outcome — there is
+  no outcome yet). Pull the prediction math (home-field + pitcher adjustment
+  + `expected_win_prob`) out of `process_game` into a small reusable function
+  in `elo.py` so both paths share it instead of duplicating the formula.
+
+**2. Brier score / calibration backtest (no new script yet)**
+Also buildable immediately, and doesn't require waiting for new games: every
+historical game already has a "pregame" prediction implicit in the replay —
+the `expected_home` value computed right before each rating update, built
+only from information available before that game (no lookahead, by
+construction). Capture that value alongside the actual outcome for all 8,735+
+replayed games and score it:
+- **Brier score**: `mean((predicted_prob - actual_outcome)^2)` — lower is
+  better, 0.25 is what an always-50% model scores, 0 is a psychic.
+- **Reliability/calibration curve**: bucket predictions (e.g. 0-10%, 10-20%,
+  ... 90-100%) and check whether the actual home-win rate in each bucket
+  matches the bucket's midpoint. This is the real calibration check — Brier
+  score alone can hide a model that's accurate on average but miscalibrated
+  in the tails (overconfident favorites, underconfident dogs, etc).
+- Worth comparing pitcher-adjusted vs. team-strength-only predictions
+  separately, to see whether `PITCHER_ELO_SCALE` (still an unbacktested
+  estimate — see Status above) is actually helping or just adding noise.
+
+**3. Vegas closing-line comparison (blocked on an API key)**
+Needs [The Odds API](https://the-odds-api.com) (free tier, ~500 requests/month,
+no credit card) — sign up, then drop the key in a new `.env` file (already
+gitignored) as `ODDS_API_KEY=...`. Once that exists:
+- Fetch the `h2h` (moneyline) market for upcoming MLB games.
+- **Devig** the two-sided moneyline into a fair win probability — raw implied
+  probability from odds always sums to >100% (the bookmaker's margin), so
+  normalize the two sides to sum to 1 before treating it as a probability.
+- Match to our own predictions by team + date, store both side by side, and
+  once outcomes are known, compute Brier score for *both* our model and Vegas
+  over the same games — that's the real test of whether this model is adding
+  anything Vegas doesn't already know.
+- This can only accumulate going forward (the free tier doesn't offer
+  historical odds), so the earlier this starts logging, the sooner there's a
+  meaningful sample.
