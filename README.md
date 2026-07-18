@@ -63,9 +63,21 @@ then open http://localhost:8791/.
 
 - `scripts/fetch_schedule.py` — pulls a day's schedule + probable pitchers (smoke test, done)
 - `scripts/fetch_history.py` — pulls regular-season results by year into `data/mlb.db` (done; run for 2023-2026)
-- `src/mlb_elo/elo.py` — Elo engine (home-field edge, run-differential MOV multiplier, between-season regression); no starter or park adjustment yet
+- `src/mlb_elo/elo.py` — Elo engine (home-field edge, run-differential MOV multiplier, between-season regression, 2026 starting-pitcher adjustment); no park adjustment yet
+- `src/mlb_elo/fip.py` — FIP (defense-independent pitcher quality) as of a given date, from `pitcher_game_logs`
+- `scripts/backfill_pitchers.py` — fills in `home_pitcher_id`/`away_pitcher_id` on 2026 games (done; re-run periodically to catch newer games)
+- `scripts/fetch_pitcher_stats.py` — pulls per-start game logs for every 2026 starter (done; re-run periodically to keep FIP current)
 - `scripts/build_ratings.py` — replays all stored games and prints current ratings (done)
 - `scripts/export_dashboard.py` — exports ratings, season history, and the ESPN RPI comparison to `docs/data.json` (done)
 - `docs/index.html` — static dashboard, GitHub Pages–hosted (done)
 
-Next: adjust for starting pitcher and ballpark, then generate next-day predictions and log them against Vegas closing lines for calibration.
+The pitcher adjustment only applies to 2026 games where both starters have
+logged at least 10 innings this season (see `fip.MIN_OUTS_FOR_FIP`) — early
+starts and 2023-2025 fall back to team-strength-only. `elo.PITCHER_ELO_SCALE`
+(Elo points per run of FIP gap between starters) is a documented estimate,
+not a backtested constant — worth revisiting if predictions skew.
+
+Refresh order for 2026 pitcher data: `backfill_pitchers.py` →
+`fetch_pitcher_stats.py` → `export_dashboard.py`.
+
+Next: park adjustment, then generate next-day predictions and log them against Vegas closing lines for calibration.

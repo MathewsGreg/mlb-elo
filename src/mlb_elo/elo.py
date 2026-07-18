@@ -5,9 +5,10 @@ K-factor scaled by a margin-of-victory multiplier (derived from run
 differential), a fixed home-field bump, and between-season regression to the
 mean so a team's rating carries over but isn't fully "sticky" year to year.
 
-No starting-pitcher or park adjustment yet — this is team-strength-from-
-results only. Those come later as adjustments layered on top of expected
-win probability.
+Starting pitchers adjust the pregame expected win probability for 2026 games
+where both starters have enough logged innings (see PITCHER_ELO_SCALE below);
+earlier seasons and games without pitcher data fall back to team-strength-only.
+No park adjustment yet.
 """
 from dataclasses import dataclass, field
 import math
@@ -16,6 +17,15 @@ DEFAULT_RATING = 1500.0
 HOME_ADVANTAGE = 24.0
 K_BASE = 4.0
 SEASON_REGRESSION = 1.0 / 3.0  # fraction reverted toward the mean each new season
+
+# Elo points per 1.00 run of FIP gap between the two starters, applied only
+# to that game's expected-win-probability (not a persistent rating, same
+# mechanism as HOME_ADVANTAGE). Unlike HOME_ADVANTAGE and K_BASE, this has
+# no published reference value to anchor on — it's a starting estimate
+# (a full run of FIP is a real quality gap, made worth a bit more than two
+# home-field advantages) and should be revisited by backtesting prediction
+# accuracy with it on vs. off, not treated as calibrated.
+PITCHER_ELO_SCALE = 25.0
 
 
 def expected_win_prob(rating_a: float, rating_b: float) -> float:
@@ -60,6 +70,8 @@ class EloEngine:
         away_team_name: str,
         home_score: int,
         away_score: int,
+        home_pitcher_fip: float | None = None,
+        away_pitcher_fip: float | None = None,
     ) -> None:
         self._maybe_start_new_season(season)
         self.team_names[home_team_id] = home_team_name
@@ -68,10 +80,16 @@ class EloEngine:
         home_rating = self.get_rating(home_team_id)
         away_rating = self.get_rating(away_team_id)
 
-        expected_home = expected_win_prob(home_rating + HOME_ADVANTAGE, away_rating)
+        pitcher_adjustment = 0.0
+        if home_pitcher_fip is not None and away_pitcher_fip is not None:
+            pitcher_adjustment = (away_pitcher_fip - home_pitcher_fip) * PITCHER_ELO_SCALE
+
+        expected_home = expected_win_prob(
+            home_rating + HOME_ADVANTAGE + pitcher_adjustment, away_rating
+        )
         actual_home = 1.0 if home_score > away_score else 0.0
 
-        elo_diff = (home_rating + HOME_ADVANTAGE) - away_rating
+        elo_diff = (home_rating + HOME_ADVANTAGE + pitcher_adjustment) - away_rating
         run_diff = home_score - away_score
         multiplier = mov_multiplier(elo_diff, run_diff)
 

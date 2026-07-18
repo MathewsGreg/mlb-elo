@@ -21,6 +21,9 @@
     --series-6-text:  #b8302f;
     --context-line:   #c3c2b7;
     --row-hover:      #f0efec;
+    --diverging-neg:  #e34948;
+    --diverging-mid:  #f0efec;
+    --diverging-pos:  #2a78d6;
   }
   @media (prefers-color-scheme: dark) {
     :root:where(:not([data-theme="light"])) {
@@ -39,6 +42,9 @@
       --series-6-text:  #ef9494;
       --context-line:   #383835;
       --row-hover:      #232322;
+      --diverging-neg:  #e66767;
+      --diverging-mid:  #383835;
+      --diverging-pos:  #3987e5;
     }
   }
   :root[data-theme="dark"] {
@@ -57,6 +63,9 @@
     --series-6-text:  #ef9494;
     --context-line:   #383835;
     --row-hover:      #232322;
+    --diverging-neg:  #e66767;
+    --diverging-mid:  #383835;
+    --diverging-pos:  #3987e5;
   }
 
   * { box-sizing: border-box; }
@@ -142,6 +151,19 @@
   .tooltip .t-key { width: 10px; height: 2px; border-radius: 1px; }
   .tooltip .t-val { font-weight: 700; font-variant-numeric: tabular-nums; }
 
+  .axis-title { fill: var(--text-muted); font-size: 11px; }
+  .diagonal { stroke: var(--baseline); stroke-width: 1; stroke-dasharray: 3 3; }
+  .scatter-dot { stroke: var(--surface-1); stroke-width: 1.5; }
+  .scatter-dot.picked { stroke-width: 3; }
+  .scatter-label { font-size: 11px; font-weight: 600; fill: var(--text-primary); }
+
+  .legend-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1.1rem; max-width: 320px; }
+  .legend-label { font-size: 0.68rem; color: var(--text-muted); white-space: nowrap; }
+  .legend-gradient {
+    flex: 1; height: 8px; border-radius: 4px;
+    background: linear-gradient(to right, var(--diverging-neg), var(--diverging-mid), var(--diverging-pos));
+  }
+
   footer { font-size: 0.72rem; color: var(--text-muted); text-align: center; margin-top: 2rem; line-height: 1.6; }
   footer a { color: inherit; }
 </style>
@@ -190,6 +212,20 @@
     <div class="chart-wrap">
       <svg id="chart" viewBox="0 0 900 380" preserveAspectRatio="xMidYMid meet"></svg>
       <div class="tooltip" id="tooltip"></div>
+    </div>
+  </section>
+
+  <section>
+    <p class="section-title">Runs scored vs. runs allowed per 9 innings, current season</p>
+    <p class="section-note">Position is actual runs scored/allowed &mdash; below the dashed line means outscoring opponents. Color is <em>independent</em>: the Elo rating driving the rankings table above. A dot whose color doesn't match its position (e.g. a red-tinted team sitting in good run-differential territory) is exactly where the Elo model and raw run output disagree &mdash; worth a closer look. Team A/B from above are ringed and labeled here too.</p>
+    <div class="legend-row">
+      <span class="legend-label">Below-average Elo</span>
+      <div class="legend-gradient"></div>
+      <span class="legend-label">Above-average Elo</span>
+    </div>
+    <div class="chart-wrap">
+      <svg id="scatter" viewBox="0 0 900 500" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="tooltip" id="scatter-tooltip"></div>
     </div>
   </section>
 
@@ -436,9 +472,174 @@ function buildChart() {
   });
 }
 
+function hexToRgb(hex) {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function lerpColor(hexA, hexB, t) {
+  const a = hexToRgb(hexA), b = hexToRgb(hexB);
+  const mix = a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  return `rgb(${mix[0]}, ${mix[1]}, ${mix[2]})`;
+}
+
+function divergingColor(diff, maxAbs) {
+  const style = getComputedStyle(document.documentElement);
+  const neg = style.getPropertyValue('--diverging-neg').trim();
+  const mid = style.getPropertyValue('--diverging-mid').trim();
+  const pos = style.getPropertyValue('--diverging-pos').trim();
+  if (maxAbs === 0) return mid;
+  const t = Math.max(-1, Math.min(1, diff / maxAbs));
+  return t < 0 ? lerpColor(neg, mid, 1 + t) : lerpColor(mid, pos, t);
+}
+
+function buildScatter() {
+  const svg = document.getElementById('scatter');
+  svg.innerHTML = '';
+  const sw = 900, sh = 500;
+  const margin = { top: 16, right: 16, bottom: 40, left: 52 };
+  const plotW = sw - margin.left - margin.right;
+  const plotH = sh - margin.top - margin.bottom;
+
+  let lo = Infinity, hi = -Infinity;
+  for (const t of DATA.teams) {
+    lo = Math.min(lo, t.runs_scored_per9, t.runs_allowed_per9);
+    hi = Math.max(hi, t.runs_scored_per9, t.runs_allowed_per9);
+  }
+  const step = niceStep(hi - lo);
+  lo = Math.floor((lo - step) / step) * step;
+  hi = Math.ceil((hi + step) / step) * step;
+
+  const scale = v => margin.left + ((v - lo) / (hi - lo)) * plotW;
+  const scaleY = v => margin.top + plotH - ((v - lo) / (hi - lo)) * plotH;
+
+  const g = document.createElementNS(SVG_NS, 'g');
+  svg.appendChild(g);
+
+  for (let v = lo; v <= hi; v += step) {
+    const x = scale(v), y = scaleY(v);
+    const vLine = document.createElementNS(SVG_NS, 'line');
+    vLine.setAttribute('class', 'gridline');
+    vLine.setAttribute('x1', x); vLine.setAttribute('x2', x);
+    vLine.setAttribute('y1', margin.top); vLine.setAttribute('y2', sh - margin.bottom);
+    g.appendChild(vLine);
+    const hLine = document.createElementNS(SVG_NS, 'line');
+    hLine.setAttribute('class', 'gridline');
+    hLine.setAttribute('x1', margin.left); hLine.setAttribute('x2', sw - margin.right);
+    hLine.setAttribute('y1', y); hLine.setAttribute('y2', y);
+    g.appendChild(hLine);
+
+    const xLabel = document.createElementNS(SVG_NS, 'text');
+    xLabel.setAttribute('class', 'axis-label');
+    xLabel.setAttribute('x', x); xLabel.setAttribute('y', sh - margin.bottom + 16);
+    xLabel.setAttribute('text-anchor', 'middle');
+    xLabel.textContent = v.toFixed(1);
+    g.appendChild(xLabel);
+
+    const yLabel = document.createElementNS(SVG_NS, 'text');
+    yLabel.setAttribute('class', 'axis-label');
+    yLabel.setAttribute('x', margin.left - 8); yLabel.setAttribute('y', y + 3);
+    yLabel.setAttribute('text-anchor', 'end');
+    yLabel.textContent = v.toFixed(1);
+    g.appendChild(yLabel);
+  }
+
+  const diag = document.createElementNS(SVG_NS, 'line');
+  diag.setAttribute('class', 'diagonal');
+  diag.setAttribute('x1', scale(lo)); diag.setAttribute('y1', scaleY(lo));
+  diag.setAttribute('x2', scale(hi)); diag.setAttribute('y2', scaleY(hi));
+  g.appendChild(diag);
+
+  const xTitle = document.createElementNS(SVG_NS, 'text');
+  xTitle.setAttribute('class', 'axis-title');
+  xTitle.setAttribute('x', margin.left + plotW / 2); xTitle.setAttribute('y', sh - 6);
+  xTitle.setAttribute('text-anchor', 'middle');
+  xTitle.textContent = 'Runs scored per 9 innings';
+  g.appendChild(xTitle);
+
+  const yTitle = document.createElementNS(SVG_NS, 'text');
+  yTitle.setAttribute('class', 'axis-title');
+  yTitle.setAttribute('x', 14); yTitle.setAttribute('y', margin.top + plotH / 2);
+  yTitle.setAttribute('text-anchor', 'middle');
+  yTitle.setAttribute('transform', `rotate(-90 14 ${margin.top + plotH / 2})`);
+  yTitle.textContent = 'Runs allowed per 9 innings';
+  g.appendChild(yTitle);
+
+  // Elo's own neutral rating (DEFAULT_RATING in elo.py) — color centers here,
+  // independent of each team's plotted position, so the two channels can disagree.
+  const ELO_BASELINE = 1500;
+  const maxAbsEloDev = Math.max(...DATA.teams.map(t => Math.abs(t.elo - ELO_BASELINE)));
+  const tooltip = document.getElementById('scatter-tooltip');
+
+  function showTooltip(ev, team, diff) {
+    const rect = svg.getBoundingClientRect();
+    tooltip.innerHTML = `
+      <div class="t-date"></div>
+      <div class="t-row"><span class="t-val"></span></div>
+      <div class="t-row"><span class="t-val"></span></div>
+    `;
+    const vals = tooltip.querySelectorAll('.t-val');
+    tooltip.querySelector('.t-date').textContent = team.team;
+    vals[0].textContent =
+      `${team.runs_scored_per9.toFixed(2)} RS/9 · ${team.runs_allowed_per9.toFixed(2)} RA/9 · ${diff > 0 ? '+' : ''}${diff.toFixed(2)} diff`;
+    vals[1].textContent = `Elo rank ${team.elo_rank} (${team.elo.toFixed(1)})`;
+    const wrapRect = svg.parentElement.getBoundingClientRect();
+    const px = ev.clientX - rect.left + (rect.left - wrapRect.left);
+    const py = ev.clientY - rect.top + (rect.top - wrapRect.top);
+    tooltip.style.left = Math.min(px + 12, wrapRect.width - 180) + 'px';
+    tooltip.style.top = Math.max(py - 36, 0) + 'px';
+    tooltip.style.opacity = '1';
+  }
+  function hideTooltip() { tooltip.style.opacity = '0'; }
+
+  const context = DATA.teams.filter(t => t.team !== teamA && t.team !== teamB);
+  const picked = DATA.teams.filter(t => t.team === teamA || t.team === teamB);
+
+  function drawDot(team, isPicked) {
+    const diff = team.runs_scored_per9 - team.runs_allowed_per9;
+    const cx = scale(team.runs_scored_per9), cy = scaleY(team.runs_allowed_per9);
+    const fill = divergingColor(team.elo - ELO_BASELINE, maxAbsEloDev);
+    const ringColor = team.team === teamA
+      ? getComputedStyle(document.documentElement).getPropertyValue('--series-1').trim()
+      : team.team === teamB
+        ? getComputedStyle(document.documentElement).getPropertyValue('--series-6').trim()
+        : null;
+
+    const dot = document.createElementNS(SVG_NS, 'circle');
+    dot.setAttribute('class', 'scatter-dot' + (isPicked ? ' picked' : ''));
+    dot.setAttribute('cx', cx); dot.setAttribute('cy', cy);
+    dot.setAttribute('r', isPicked ? 7 : 5);
+    dot.setAttribute('fill', fill);
+    if (ringColor) dot.setAttribute('stroke', ringColor);
+    g.appendChild(dot);
+
+    if (isPicked) {
+      const label = document.createElementNS(SVG_NS, 'text');
+      label.setAttribute('class', 'scatter-label');
+      label.setAttribute('x', Math.min(cx + 10, sw - margin.right - 4));
+      label.setAttribute('y', cy - 10);
+      label.setAttribute('text-anchor', cx + 10 > sw - margin.right - 4 ? 'end' : 'start');
+      label.textContent = team.team;
+      g.appendChild(label);
+    }
+
+    const hit = document.createElementNS(SVG_NS, 'circle');
+    hit.setAttribute('cx', cx); hit.setAttribute('cy', cy); hit.setAttribute('r', 14);
+    hit.setAttribute('fill', 'transparent');
+    hit.addEventListener('pointerenter', (ev) => showTooltip(ev, team, diff));
+    hit.addEventListener('pointermove', (ev) => showTooltip(ev, team, diff));
+    hit.addEventListener('pointerleave', hideTooltip);
+    g.appendChild(hit);
+  }
+
+  for (const team of context) drawDot(team, false);
+  for (const team of picked) drawDot(team, true);
+}
+
 function renderAll() {
   renderTable();
   buildChart();
+  buildScatter();
   syncSelects();
 }
 

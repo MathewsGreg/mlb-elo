@@ -11,7 +11,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from mlb_elo import db
+from mlb_elo import db, fip
 from mlb_elo.elo import EloEngine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -20,16 +20,24 @@ ESPN_SNAPSHOT_PATH = DOCS_DIR / "espn_rpi.json"
 OUTPUT_PATH = DOCS_DIR / "data.json"
 
 
-def replay(games: list[tuple]) -> tuple[EloEngine, int, dict[int, list[dict]]]:
+def replay(conn, games: list[tuple]) -> tuple[EloEngine, int, dict[int, list[dict]]]:
     """Replay games chronologically, recording each team's Elo at the end of
-    every date within the current (latest) season only."""
+    every date within the current (latest) season only. Starting-pitcher FIP
+    (as of the game date, so no look-ahead) adjusts the current season's
+    games where both starters have a usable sample; earlier seasons and
+    games missing pitcher data fall back to team-strength-only."""
     engine = EloEngine()
     latest_season = max(row[0] for row in games)
     history: dict[int, list[dict]] = {}
 
     current_date = None
     for (season, official_date, home_id, home_name, away_id, away_name,
-         home_score, away_score) in games:
+         home_score, away_score, home_pitcher_id, away_pitcher_id) in games:
+        home_fip = away_fip = None
+        if season == latest_season and home_pitcher_id and away_pitcher_id:
+            home_fip = fip.fip_as_of(conn, home_pitcher_id, official_date)
+            away_fip = fip.fip_as_of(conn, away_pitcher_id, official_date)
+
         engine.process_game(
             season=season,
             home_team_id=home_id,
@@ -38,6 +46,8 @@ def replay(games: list[tuple]) -> tuple[EloEngine, int, dict[int, list[dict]]]:
             away_team_name=away_name,
             home_score=home_score,
             away_score=away_score,
+            home_pitcher_fip=home_fip,
+            away_pitcher_fip=away_fip,
         )
 
         if season == latest_season and official_date != current_date:
@@ -51,19 +61,23 @@ def replay(games: list[tuple]) -> tuple[EloEngine, int, dict[int, list[dict]]]:
 
 
 def season_records(conn, season: int) -> dict[str, dict]:
-    """Win/loss record per team name for the given season."""
+    """Win/loss record and runs scored/allowed per team name for the season."""
     records: dict[str, dict] = {}
     cur = conn.execute(
         """
-        SELECT home_team_name, away_team_name, home_win
+        SELECT home_team_name, away_team_name, home_win, home_score, away_score
         FROM games
         WHERE game_type = 'R' AND status = 'Final' AND season = ?
         """,
         (season,),
     )
-    for home_name, away_name, home_win in cur.fetchall():
-        home_rec = records.setdefault(home_name, {"wins": 0, "losses": 0})
-        away_rec = records.setdefault(away_name, {"wins": 0, "losses": 0})
+    for home_name, away_name, home_win, home_score, away_score in cur.fetchall():
+        home_rec = records.setdefault(home_name, {"wins": 0, "losses": 0, "runs_scored": 0, "runs_allowed": 0})
+        away_rec = records.setdefault(away_name, {"wins": 0, "losses": 0, "runs_scored": 0, "runs_allowed": 0})
+        home_rec["runs_scored"] += home_score
+        home_rec["runs_allowed"] += away_score
+        away_rec["runs_scored"] += away_score
+        away_rec["runs_allowed"] += home_score
         if home_win:
             home_rec["wins"] += 1
             away_rec["losses"] += 1
@@ -93,7 +107,8 @@ def main() -> None:
     cur = conn.execute(
         """
         SELECT season, official_date, home_team_id, home_team_name,
-               away_team_id, away_team_name, home_score, away_score
+               away_team_id, away_team_name, home_score, away_score,
+               home_pitcher_id, away_pitcher_id
         FROM games
         WHERE game_type = 'R' AND status = 'Final'
         ORDER BY official_date, game_pk
@@ -101,23 +116,30 @@ def main() -> None:
     )
     games = cur.fetchall()
 
-    engine, latest_season, history = replay(games)
+    engine, latest_season, history = replay(conn, games)
     records = season_records(conn, latest_season)
     espn = load_espn_snapshot()
     conn.close()
 
     standings = engine.standings()  # [(name, rating), ...] sorted desc
     teams = []
+    default_record = {"wins": 0, "losses": 0, "runs_scored": 0, "runs_allowed": 0}
     for elo_rank, (name, rating) in enumerate(standings, start=1):
-        record = records.get(name, {"wins": 0, "losses": 0})
+        record = records.get(name, default_record)
         espn_info = espn["by_name"].get(name)
         team_id = next(tid for tid, tname in engine.team_names.items() if tname == name)
+        games_played = record["wins"] + record["losses"]
         teams.append({
             "team": name,
             "elo": round(rating, 1),
             "elo_rank": elo_rank,
             "wins": record["wins"],
             "losses": record["losses"],
+            "runs_scored": record["runs_scored"],
+            "runs_allowed": record["runs_allowed"],
+            # A game is ~9 innings, so runs/game already is the per-9 rate.
+            "runs_scored_per9": round(record["runs_scored"] / games_played, 2) if games_played else None,
+            "runs_allowed_per9": round(record["runs_allowed"] / games_played, 2) if games_played else None,
             "rpi": espn_info["rpi"] if espn_info else None,
             "rpi_rank": espn_info["rpi_rank"] if espn_info else None,
             "delta": (espn_info["rpi_rank"] - elo_rank) if espn_info else None,

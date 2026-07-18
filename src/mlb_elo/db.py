@@ -26,7 +26,25 @@ CREATE TABLE IF NOT EXISTS games (
 
 CREATE INDEX IF NOT EXISTS idx_games_season_date
     ON games (season, official_date);
+
+CREATE TABLE IF NOT EXISTS pitcher_game_logs (
+    pitcher_id INTEGER NOT NULL,
+    game_date TEXT NOT NULL,
+    outs INTEGER NOT NULL,
+    walks INTEGER NOT NULL,
+    hit_by_pitch INTEGER NOT NULL,
+    home_runs INTEGER NOT NULL,
+    strikeouts INTEGER NOT NULL,
+    PRIMARY KEY (pitcher_id, game_date)
+);
 """
+
+GAMES_PITCHER_COLUMNS = [
+    ("home_pitcher_id", "INTEGER"),
+    ("home_pitcher_name", "TEXT"),
+    ("away_pitcher_id", "INTEGER"),
+    ("away_pitcher_name", "TEXT"),
+]
 
 UPSERT_SQL = """
 INSERT INTO games (
@@ -50,9 +68,45 @@ def connect(db_path: Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.executescript(SCHEMA)
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(games)")}
+    for name, sql_type in GAMES_PITCHER_COLUMNS:
+        if name not in existing:
+            conn.execute(f"ALTER TABLE games ADD COLUMN {name} {sql_type}")
+    conn.commit()
     return conn
 
 
 def upsert_games(conn: sqlite3.Connection, rows: list[dict]) -> None:
     conn.executemany(UPSERT_SQL, rows)
+    conn.commit()
+
+
+def set_probable_pitchers(conn: sqlite3.Connection, rows: list[dict]) -> None:
+    """rows: [{game_pk, home_pitcher_id, home_pitcher_name, away_pitcher_id, away_pitcher_name}]"""
+    conn.executemany(
+        """
+        UPDATE games SET
+            home_pitcher_id = :home_pitcher_id,
+            home_pitcher_name = :home_pitcher_name,
+            away_pitcher_id = :away_pitcher_id,
+            away_pitcher_name = :away_pitcher_name
+        WHERE game_pk = :game_pk
+        """,
+        rows,
+    )
+    conn.commit()
+
+
+def upsert_pitcher_game_logs(conn: sqlite3.Connection, rows: list[dict]) -> None:
+    conn.executemany(
+        """
+        INSERT INTO pitcher_game_logs
+            (pitcher_id, game_date, outs, walks, hit_by_pitch, home_runs, strikeouts)
+        VALUES (:pitcher_id, :game_date, :outs, :walks, :hit_by_pitch, :home_runs, :strikeouts)
+        ON CONFLICT(pitcher_id, game_date) DO UPDATE SET
+            outs=excluded.outs, walks=excluded.walks, hit_by_pitch=excluded.hit_by_pitch,
+            home_runs=excluded.home_runs, strikeouts=excluded.strikeouts
+        """,
+        rows,
+    )
     conn.commit()
