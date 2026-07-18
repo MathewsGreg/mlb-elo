@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLB Elo Ratings</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6;
+    --series-6:       #e34948;
+    --series-1-text:  #184f95;
+    --series-6-text:  #b8302f;
+    --context-line:   #c3c2b7;
+    --row-hover:      #f0efec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page:           #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1:       #3987e5;
+      --series-6:       #e66767;
+      --series-1-text:  #6ea8f0;
+      --series-6-text:  #ef9494;
+      --context-line:   #383835;
+      --row-hover:      #232322;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page:           #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1:       #3987e5;
+    --series-6:       #e66767;
+    --series-1-text:  #6ea8f0;
+    --series-6-text:  #ef9494;
+    --context-line:   #383835;
+    --row-hover:      #232322;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page);
+    color: var(--text-primary);
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+
+  header { margin-bottom: 1.75rem; }
+  .eyebrow {
+    font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 0.4rem;
+  }
+  h1 { font-size: 1.6rem; margin: 0 0 0.35rem; }
+  .subtitle { font-size: 0.85rem; color: var(--text-secondary); }
+  .subtitle a { color: inherit; }
+
+  section {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.4rem 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .section-title { font-size: 0.95rem; font-weight: 600; margin: 0 0 0.25rem; }
+  .section-note { font-size: 0.78rem; color: var(--text-muted); margin: 0 0 1rem; line-height: 1.45; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .table-scroll { overflow-x: auto; }
+  th, td { padding: 0.5rem 0.6rem; text-align: right; white-space: nowrap; }
+  th:nth-child(2), td:nth-child(2) { text-align: left; }
+  th {
+    font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-muted); border-bottom: 1px solid var(--baseline);
+    cursor: pointer; user-select: none; font-weight: 600;
+  }
+  th:hover { color: var(--text-secondary); }
+  th .arrow { font-size: 0.65rem; margin-left: 0.15rem; opacity: 0.6; }
+  td { border-bottom: 1px solid var(--gridline); font-variant-numeric: tabular-nums; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--row-hover); }
+  tbody tr.selected-a { box-shadow: inset 3px 0 0 var(--series-1); }
+  tbody tr.selected-b { box-shadow: inset 3px 0 0 var(--series-6); }
+  .team-name { color: var(--text-primary); font-weight: 500; }
+  .delta-pos { color: var(--series-1-text); font-weight: 600; }
+  .delta-neg { color: var(--series-6-text); font-weight: 600; }
+  .delta-zero { color: var(--text-muted); }
+
+  .controls { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
+  .control { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary); }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .swatch.a { background: var(--series-1); }
+  .swatch.b { background: var(--series-6); }
+  select {
+    font: inherit; font-size: 0.8rem; padding: 0.3rem 0.5rem; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
+  }
+
+  .chart-wrap { position: relative; }
+  svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .axis-label { fill: var(--text-muted); font-size: 10px; }
+  .gridline { stroke: var(--gridline); stroke-width: 1; }
+  .baseline { stroke: var(--baseline); stroke-width: 1; }
+  .context-line { fill: none; stroke: var(--context-line); stroke-width: 1; opacity: 0.55; }
+  .series-a { fill: none; stroke: var(--series-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .series-b { fill: none; stroke: var(--series-6); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .end-dot { stroke: var(--surface-1); stroke-width: 2; }
+  .end-label { font-size: 11px; font-weight: 600; }
+  .crosshair { stroke: var(--baseline); stroke-width: 1; pointer-events: none; }
+
+  .tooltip {
+    position: absolute; pointer-events: none; background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 0.65rem;
+    font-size: 0.75rem; box-shadow: 0 4px 14px rgba(0,0,0,0.15); opacity: 0;
+    transition: opacity 0.1s; white-space: nowrap;
+  }
+  .tooltip .t-date { color: var(--text-muted); margin-bottom: 0.3rem; }
+  .tooltip .t-row { display: flex; align-items: center; gap: 0.4rem; }
+  .tooltip .t-row + .t-row { margin-top: 0.2rem; }
+  .tooltip .t-key { width: 10px; height: 2px; border-radius: 1px; }
+  .tooltip .t-val { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  footer { font-size: 0.72rem; color: var(--text-muted); text-align: center; margin-top: 2rem; line-height: 1.6; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">From-scratch Elo model</div>
+    <h1>MLB Elo Ratings</h1>
+    <div class="subtitle" id="subtitle">Loading&hellip;</div>
+  </header>
+
+  <section>
+    <p class="section-title">Rankings &amp; ESPN RPI comparison</p>
+    <p class="section-note" id="table-note"></p>
+    <div class="table-scroll">
+      <table id="ranks-table">
+        <thead>
+          <tr>
+            <th data-key="elo_rank">Elo Rank <span class="arrow"></span></th>
+            <th data-key="team">Team <span class="arrow"></span></th>
+            <th data-key="elo">Elo <span class="arrow"></span></th>
+            <th data-key="wins">Record <span class="arrow"></span></th>
+            <th data-key="rpi_rank">ESPN RPI Rank <span class="arrow"></span></th>
+            <th data-key="delta">&Delta; (RPI &minus; Elo) <span class="arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="ranks-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <p class="section-title">Elo trajectory, current season</p>
+    <p class="section-note">All 30 teams shown as context; pick one or two below (or click a table row) to trace their season.</p>
+    <div class="controls">
+      <div class="control"><span class="swatch a"></span>
+        <label for="select-a">Team A</label>
+        <select id="select-a"></select>
+      </div>
+      <div class="control"><span class="swatch b"></span>
+        <label for="select-b">Team B (optional)</label>
+        <select id="select-b"></select>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <svg id="chart" viewBox="0 0 900 380" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="tooltip" id="tooltip"></div>
+    </div>
+  </section>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+const DATA_URL = 'data.json';
+let DATA = null;
+let sortKey = 'elo_rank';
+let sortDir = 1;
+let teamA = null;
+let teamB = '';
+
+function fmtDelta(d) {
+  if (d === null || d === undefined) return '&mdash;';
+  if (d === 0) return '<span class="delta-zero">0</span>';
+  const cls = d > 0 ? 'delta-pos' : 'delta-neg';
+  const arrow = d > 0 ? '&#9650;' : '&#9660;';
+  return `<span class="${cls}">${arrow} ${Math.abs(d)}</span>`;
+}
+
+function renderTable() {
+  const rows = [...DATA.teams].sort((a, b) => {
+    const av = a[sortKey], bv = b[sortKey];
+    if (av === null) return 1;
+    if (bv === null) return -1;
+    if (typeof av === 'string') return av.localeCompare(bv) * sortDir;
+    return (av - bv) * sortDir;
+  });
+  const body = document.getElementById('ranks-body');
+  body.innerHTML = '';
+  for (const t of rows) {
+    const tr = document.createElement('tr');
+    if (t.team === teamA) tr.classList.add('selected-a');
+    if (t.team === teamB) tr.classList.add('selected-b');
+    tr.innerHTML = `
+      <td>${t.elo_rank}</td>
+      <td class="team-name"></td>
+      <td>${t.elo.toFixed(1)}</td>
+      <td>${t.wins}-${t.losses}</td>
+      <td>${t.rpi_rank ?? '&mdash;'}</td>
+      <td>${fmtDelta(t.delta)}</td>
+    `;
+    tr.querySelector('.team-name').textContent = t.team;
+    tr.addEventListener('click', () => { teamA = t.team; syncSelects(); renderAll(); });
+    body.appendChild(tr);
+  }
+  document.querySelectorAll('#ranks-table th').forEach(th => {
+    const arrow = th.querySelector('.arrow');
+    arrow.textContent = th.dataset.key === sortKey ? (sortDir === 1 ? '↑' : '↓') : '';
+  });
+}
+
+function populateSelects() {
+  const names = DATA.teams.map(t => t.team).sort();
+  const selA = document.getElementById('select-a');
+  const selB = document.getElementById('select-b');
+  selA.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
+  selB.innerHTML = '<option value="">None</option>' + names.map(n => `<option value="${n}">${n}</option>`).join('');
+  selA.addEventListener('change', () => { teamA = selA.value; renderAll(); });
+  selB.addEventListener('change', () => { teamB = selB.value; renderAll(); });
+}
+
+function syncSelects() {
+  document.getElementById('select-a').value = teamA || '';
+  document.getElementById('select-b').value = teamB || '';
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const MARGIN = { top: 16, right: 16, bottom: 28, left: 42 };
+const W = 900, H = 380;
+const PLOT_W = W - MARGIN.left - MARGIN.right;
+const PLOT_H = H - MARGIN.top - MARGIN.bottom;
+
+function niceStep(range) {
+  const raw = range / 6;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const steps = [1, 2, 5, 10].map(s => s * mag);
+  return steps.find(s => s >= raw) || steps[steps.length - 1];
+}
+
+function buildChart() {
+  const svg = document.getElementById('chart');
+  svg.innerHTML = '';
+  const allDates = DATA.teams[0].history.map(h => h.date);
+  const parse = d => new Date(d + 'T00:00:00Z').getTime();
+  const x0 = parse(allDates[0]), x1 = parse(allDates[allDates.length - 1]);
+
+  let yMin = Infinity, yMax = -Infinity;
+  for (const t of DATA.teams) {
+    for (const h of t.history) {
+      if (h.elo < yMin) yMin = h.elo;
+      if (h.elo > yMax) yMax = h.elo;
+    }
+  }
+  const step = niceStep(yMax - yMin);
+  yMin = Math.floor((yMin - 10) / step) * step;
+  yMax = Math.ceil((yMax + 10) / step) * step;
+
+  const xScale = t => MARGIN.left + ((t - x0) / (x1 - x0)) * PLOT_W;
+  const yScale = v => MARGIN.top + PLOT_H - ((v - yMin) / (yMax - yMin)) * PLOT_H;
+
+  const g = document.createElementNS(SVG_NS, 'g');
+  svg.appendChild(g);
+
+  for (let v = yMin; v <= yMax; v += step) {
+    const y = yScale(v);
+    const line = document.createElementNS(SVG_NS, 'line');
+    line.setAttribute('class', 'gridline');
+    line.setAttribute('x1', MARGIN.left); line.setAttribute('x2', W - MARGIN.right);
+    line.setAttribute('y1', y); line.setAttribute('y2', y);
+    g.appendChild(line);
+    const label = document.createElementNS(SVG_NS, 'text');
+    label.setAttribute('class', 'axis-label');
+    label.setAttribute('x', MARGIN.left - 8);
+    label.setAttribute('y', y + 3);
+    label.setAttribute('text-anchor', 'end');
+    label.textContent = Math.round(v);
+    g.appendChild(label);
+  }
+
+  const months = [];
+  let seen = '';
+  for (const d of allDates) {
+    const m = d.slice(0, 7);
+    if (m !== seen) { months.push(d); seen = m; }
+  }
+  for (const d of months) {
+    const x = xScale(parse(d));
+    const label = document.createElementNS(SVG_NS, 'text');
+    label.setAttribute('class', 'axis-label');
+    label.setAttribute('x', x);
+    label.setAttribute('y', H - MARGIN.bottom + 16);
+    label.setAttribute('text-anchor', 'middle');
+    label.textContent = new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+    g.appendChild(label);
+  }
+
+  const baseline = document.createElementNS(SVG_NS, 'line');
+  baseline.setAttribute('class', 'baseline');
+  baseline.setAttribute('x1', MARGIN.left); baseline.setAttribute('x2', W - MARGIN.right);
+  baseline.setAttribute('y1', H - MARGIN.bottom); baseline.setAttribute('y2', H - MARGIN.bottom);
+  g.appendChild(baseline);
+
+  function pathFor(history) {
+    return history.map((h, i) => `${i === 0 ? 'M' : 'L'} ${xScale(parse(h.date)).toFixed(1)} ${yScale(h.elo).toFixed(1)}`).join(' ');
+  }
+
+  for (const t of DATA.teams) {
+    if (t.team === teamA || t.team === teamB) continue;
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('class', 'context-line');
+    path.setAttribute('d', pathFor(t.history));
+    g.appendChild(path);
+  }
+
+  function drawSeries(teamName, cls, dotFill) {
+    const team = DATA.teams.find(t => t.team === teamName);
+    if (!team) return;
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('class', cls);
+    path.setAttribute('d', pathFor(team.history));
+    g.appendChild(path);
+
+    const last = team.history[team.history.length - 1];
+    const cx = xScale(parse(last.date)), cy = yScale(last.elo);
+    const dot = document.createElementNS(SVG_NS, 'circle');
+    dot.setAttribute('class', 'end-dot');
+    dot.setAttribute('cx', cx); dot.setAttribute('cy', cy); dot.setAttribute('r', 4);
+    dot.setAttribute('fill', dotFill);
+    g.appendChild(dot);
+
+    const label = document.createElementNS(SVG_NS, 'text');
+    label.setAttribute('class', 'end-label');
+    label.setAttribute('x', Math.min(cx + 8, W - MARGIN.right - 4));
+    label.setAttribute('y', cy + 4);
+    label.setAttribute('text-anchor', cx + 8 > W - MARGIN.right - 4 ? 'end' : 'start');
+    label.setAttribute('fill', dotFill);
+    label.textContent = team.team;
+    g.appendChild(label);
+  }
+
+  if (teamB) drawSeries(teamB, 'series-b', getComputedStyle(document.documentElement).getPropertyValue('--series-6').trim());
+  if (teamA) drawSeries(teamA, 'series-a', getComputedStyle(document.documentElement).getPropertyValue('--series-1').trim());
+
+  const crosshair = document.createElementNS(SVG_NS, 'line');
+  crosshair.setAttribute('class', 'crosshair');
+  crosshair.setAttribute('y1', MARGIN.top);
+  crosshair.setAttribute('y2', H - MARGIN.bottom);
+  crosshair.style.display = 'none';
+  g.appendChild(crosshair);
+
+  const hitRect = document.createElementNS(SVG_NS, 'rect');
+  hitRect.setAttribute('x', MARGIN.left); hitRect.setAttribute('y', MARGIN.top);
+  hitRect.setAttribute('width', PLOT_W); hitRect.setAttribute('height', PLOT_H);
+  hitRect.setAttribute('fill', 'transparent');
+  g.appendChild(hitRect);
+
+  const tooltip = document.getElementById('tooltip');
+
+  hitRect.addEventListener('pointermove', (ev) => {
+    if (!teamA && !teamB) return;
+    const rect = svg.getBoundingClientRect();
+    const px = (ev.clientX - rect.left) / rect.width * W;
+    const t = x0 + ((px - MARGIN.left) / PLOT_W) * (x1 - x0);
+    let nearest = allDates[0], nearestDiff = Infinity;
+    for (const d of allDates) {
+      const diff = Math.abs(parse(d) - t);
+      if (diff < nearestDiff) { nearestDiff = diff; nearest = d; }
+    }
+    const cx = xScale(parse(nearest));
+    crosshair.setAttribute('x1', cx); crosshair.setAttribute('x2', cx);
+    crosshair.style.display = 'block';
+
+    let rows = '';
+    for (const [name, key] of [[teamA, 'a'], [teamB, 'b']]) {
+      if (!name) continue;
+      const team = DATA.teams.find(tm => tm.team === name);
+      const point = team.history.find(h => h.date === nearest);
+      if (!point) continue;
+      const color = getComputedStyle(document.documentElement).getPropertyValue(key === 'a' ? '--series-1' : '--series-6').trim();
+      rows += `<div class="t-row"><span class="t-key" style="background:${color}"></span><span></span><span class="t-val">${point.elo.toFixed(1)}</span></div>`;
+    }
+    tooltip.innerHTML = `<div class="t-date"></div>` + rows;
+    tooltip.querySelector('.t-date').textContent = new Date(nearest + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    const nameSpans = tooltip.querySelectorAll('.t-row > span:nth-child(2)');
+    let i = 0;
+    for (const name of [teamA, teamB]) {
+      if (!name) continue;
+      nameSpans[i].textContent = name;
+      i++;
+    }
+
+    const wrapRect = svg.parentElement.getBoundingClientRect();
+    const svgX = rect.left - wrapRect.left + (cx / W) * rect.width;
+    tooltip.style.left = Math.min(svgX + 12, wrapRect.width - 160) + 'px';
+    tooltip.style.top = '8px';
+    tooltip.style.opacity = '1';
+  });
+  hitRect.addEventListener('pointerleave', () => {
+    crosshair.style.display = 'none';
+    tooltip.style.opacity = '0';
+  });
+}
+
+function renderAll() {
+  renderTable();
+  buildChart();
+  syncSelects();
+}
+
+document.querySelectorAll('#ranks-table th').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    if (sortKey === key) { sortDir *= -1; } else { sortKey = key; sortDir = 1; }
+    renderTable();
+  });
+});
+
+fetch(DATA_URL)
+  .then(r => r.json())
+  .then(d => {
+    DATA = d;
+    teamA = DATA.teams[0].team;
+    populateSelects();
+    syncSelects();
+
+    const generated = new Date(d.generated_at);
+    document.getElementById('subtitle').textContent =
+      `${d.season} season · ${d.games_replayed.toLocaleString()} games replayed · updated ${generated.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}`;
+
+    const note = document.getElementById('table-note');
+    note.innerHTML = '';
+    const noteText = document.createTextNode('ESPN RPI snapshot as of ' + d.espn_as_of + ' from ');
+    const link = document.createElement('a');
+    link.href = d.espn_source;
+    link.textContent = d.espn_source_label;
+    link.style.color = 'inherit';
+    note.appendChild(noteText);
+    note.appendChild(link);
+    note.appendChild(document.createTextNode('. Δ is positive when ESPN ranks a team lower than this Elo model does.'));
+
+    const footer = document.getElementById('footer');
+    footer.innerHTML = 'mlb-elo &mdash; a from-scratch Elo rating engine. <a href="https://github.com/MathewsGreg/mlb-elo">Source on GitHub</a>';
+
+    renderAll();
+  })
+  .catch(err => {
+    document.getElementById('subtitle').textContent = 'Failed to load data.json: ' + err.message;
+  });
+</script>
+</body>
+</html>
