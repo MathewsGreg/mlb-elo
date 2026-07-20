@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-20T19:57:13Z",
+  "generated_at": "2026-07-20T20:22:06Z",
   "season": 2026,
   "games_replayed": 8766,
   "espn_source": "https://www.espn.com/mlb/stats/rpi/_/sort/sos",
@@ -14172,105 +14172,105 @@
       "date": "2026-07-20",
       "away_team": "Tampa Bay Rays",
       "home_team": "Toronto Blue Jays",
-      "home_elo_prob": 0.567,
+      "home_elo_prob": 0.528,
       "vegas_home_prob": 0.598
     },
     {
       "date": "2026-07-20",
       "away_team": "Chicago White Sox",
       "home_team": "Texas Rangers",
-      "home_elo_prob": 0.592,
+      "home_elo_prob": 0.549,
       "vegas_home_prob": 0.602
     },
     {
       "date": "2026-07-20",
       "away_team": "Cincinnati Reds",
       "home_team": "Seattle Mariners",
-      "home_elo_prob": 0.626,
+      "home_elo_prob": 0.596,
       "vegas_home_prob": 0.567
     },
     {
       "date": "2026-07-20",
       "away_team": "Los Angeles Dodgers",
       "home_team": "Philadelphia Phillies",
-      "home_elo_prob": 0.511,
+      "home_elo_prob": 0.479,
       "vegas_home_prob": 0.571
     },
     {
       "date": "2026-07-20",
       "away_team": "Pittsburgh Pirates",
       "home_team": "New York Yankees",
-      "home_elo_prob": 0.554,
+      "home_elo_prob": 0.57,
       "vegas_home_prob": 0.513
     },
     {
       "date": "2026-07-20",
       "away_team": "New York Mets",
       "home_team": "Milwaukee Brewers",
-      "home_elo_prob": 0.748,
+      "home_elo_prob": 0.706,
       "vegas_home_prob": 0.657
     },
     {
       "date": "2026-07-20",
       "away_team": "St. Louis Cardinals",
       "home_team": "Los Angeles Angels",
-      "home_elo_prob": 0.446,
+      "home_elo_prob": 0.45,
       "vegas_home_prob": 0.507
     },
     {
       "date": "2026-07-20",
       "away_team": "San Francisco Giants",
       "home_team": "Kansas City Royals",
-      "home_elo_prob": 0.515,
+      "home_elo_prob": 0.517,
       "vegas_home_prob": 0.526
     },
     {
       "date": "2026-07-20",
       "away_team": "Miami Marlins",
       "home_team": "Houston Astros",
-      "home_elo_prob": 0.503,
+      "home_elo_prob": 0.501,
       "vegas_home_prob": 0.528
     },
     {
       "date": "2026-07-20",
       "away_team": "Washington Nationals",
       "home_team": "Colorado Rockies",
-      "home_elo_prob": 0.379,
+      "home_elo_prob": 0.418,
       "vegas_home_prob": 0.462
     },
     {
       "date": "2026-07-20",
       "away_team": "Minnesota Twins",
       "home_team": "Cleveland Guardians",
-      "home_elo_prob": 0.504,
+      "home_elo_prob": 0.552,
       "vegas_home_prob": 0.454
     },
     {
       "date": "2026-07-20",
       "away_team": "Detroit Tigers",
       "home_team": "Chicago Cubs",
-      "home_elo_prob": 0.502,
+      "home_elo_prob": 0.559,
       "vegas_home_prob": 0.512
     },
     {
       "date": "2026-07-20",
       "away_team": "Baltimore Orioles",
       "home_team": "Boston Red Sox",
-      "home_elo_prob": 0.603,
+      "home_elo_prob": 0.597,
       "vegas_home_prob": 0.59
     },
     {
       "date": "2026-07-20",
       "away_team": "San Diego Padres",
       "home_team": "Atlanta Braves",
-      "home_elo_prob": 0.583,
+      "home_elo_prob": 0.589,
       "vegas_home_prob": 0.547
     },
     {
       "date": "2026-07-20",
       "away_team": "Athletics",
       "home_team": "Arizona Diamondbacks",
-      "home_elo_prob": 0.629,
+      "home_elo_prob": 0.642,
       "vegas_home_prob": 0.572
     }
   ],
