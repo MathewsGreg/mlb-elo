@@ -164,6 +164,21 @@
     background: linear-gradient(to right, var(--diverging-neg), var(--diverging-mid), var(--diverging-pos));
   }
 
+  #upcoming-table td:first-child, #recent-table td:first-child,
+  #upcoming-table th:first-child, #recent-table th:first-child { text-align: left; }
+  .pick-team { font-weight: 700; }
+  .result-correct { color: var(--series-1-text); font-weight: 600; }
+  .result-incorrect { color: var(--series-6-text); font-weight: 600; }
+  .empty-note { font-size: 0.8rem; color: var(--text-muted); padding: 0.4rem 0; }
+  .empty-note code {
+    background: var(--row-hover); border-radius: 4px; padding: 0.1rem 0.35rem; font-size: 0.78rem;
+  }
+
+  .stat-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+  .stat-tile { flex: 1; min-width: 130px; background: var(--row-hover); border-radius: 8px; padding: 0.9rem 1.1rem; }
+  .stat-label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.35rem; }
+  .stat-value { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
   footer { font-size: 0.72rem; color: var(--text-muted); text-align: center; margin-top: 2rem; line-height: 1.6; }
   footer a { color: inherit; }
 </style>
@@ -175,6 +190,47 @@
     <h1>MLB Elo Ratings</h1>
     <div class="subtitle" id="subtitle">Loading&hellip;</div>
   </header>
+
+  <section>
+    <p class="section-title">Upcoming games &amp; predictions</p>
+    <p class="section-note">Logged before first pitch by <code>scripts/predict.py</code> and never revised afterward. Vegas column fills in once odds are wired up.</p>
+    <p class="empty-note" id="upcoming-empty" style="display:none;">No predictions logged yet for upcoming games &mdash; run <code>scripts/predict.py</code>.</p>
+    <div class="table-scroll">
+      <table id="upcoming-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Matchup</th>
+            <th>Elo Pick</th>
+            <th>Win%</th>
+            <th>Vegas Pick</th>
+          </tr>
+        </thead>
+        <tbody id="upcoming-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <p class="section-title">Track record</p>
+    <p class="section-note">Straight-up record and Brier score on graded predictions (lower is better &mdash; 0.25 is a coin flip, 0 is perfect).</p>
+    <p class="empty-note" id="scorecard-empty" style="display:none;">No graded predictions yet &mdash; check back after today's games finish.</p>
+    <div class="stat-row" id="scorecard-stats"></div>
+    <div class="table-scroll" id="recent-wrap" style="margin-top:1rem;">
+      <table id="recent-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Matchup</th>
+            <th>Elo Pick</th>
+            <th>Win%</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody id="recent-body"></tbody>
+      </table>
+    </div>
+  </section>
 
   <section>
     <p class="section-title">Rankings &amp; ESPN RPI comparison</p>
@@ -643,6 +699,94 @@ function renderAll() {
   syncSelects();
 }
 
+function pickFromHomeProb(awayTeam, homeTeam, homeProb) {
+  return homeProb >= 0.5
+    ? { picked: homeTeam, prob: homeProb }
+    : { picked: awayTeam, prob: 1 - homeProb };
+}
+
+function vegasCell(vegasProb) {
+  return vegasProb === null || vegasProb === undefined ? '&mdash;' : (vegasProb * 100).toFixed(1) + '%';
+}
+
+function renderUpcoming() {
+  const rows = DATA.upcoming_predictions || [];
+  const tableWrap = document.querySelector('#upcoming-table').closest('.table-scroll');
+  const empty = document.getElementById('upcoming-empty');
+  if (!rows.length) {
+    tableWrap.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+  tableWrap.style.display = '';
+  empty.style.display = 'none';
+
+  const body = document.getElementById('upcoming-body');
+  body.innerHTML = '';
+  for (const r of rows) {
+    const { picked, prob } = pickFromHomeProb(r.away_team, r.home_team, r.home_elo_prob);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.date}</td>
+      <td class="team-name"></td>
+      <td class="pick-team"></td>
+      <td>${(prob * 100).toFixed(1)}%</td>
+      <td>${vegasCell(r.vegas_home_prob)}</td>
+    `;
+    tr.querySelector('.team-name').textContent = `${r.away_team} @ ${r.home_team}`;
+    tr.querySelector('.pick-team').textContent = picked;
+    body.appendChild(tr);
+  }
+}
+
+function renderScorecard() {
+  const sc = DATA.prediction_scorecard || { graded_games: 0 };
+  const statsEl = document.getElementById('scorecard-stats');
+  const recentWrap = document.getElementById('recent-wrap');
+  const empty = document.getElementById('scorecard-empty');
+
+  if (!sc.graded_games) {
+    statsEl.style.display = 'none';
+    recentWrap.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+  statsEl.style.display = '';
+  recentWrap.style.display = '';
+  empty.style.display = 'none';
+
+  const winPct = (sc.correct / sc.graded_games * 100).toFixed(1);
+  statsEl.innerHTML = `
+    <div class="stat-tile"><div class="stat-label">Graded games</div><div class="stat-value"></div></div>
+    <div class="stat-tile"><div class="stat-label">Record</div><div class="stat-value"></div></div>
+    <div class="stat-tile"><div class="stat-label">Win rate</div><div class="stat-value"></div></div>
+    <div class="stat-tile"><div class="stat-label">Brier score</div><div class="stat-value"></div></div>
+  `;
+  const vals = statsEl.querySelectorAll('.stat-value');
+  vals[0].textContent = sc.graded_games;
+  vals[1].textContent = `${sc.correct}-${sc.incorrect}`;
+  vals[2].textContent = `${winPct}%`;
+  vals[3].textContent = sc.brier_score.toFixed(4);
+
+  const body = document.getElementById('recent-body');
+  body.innerHTML = '';
+  for (const r of [...sc.recent].reverse()) {
+    const { picked, prob } = pickFromHomeProb(r.away_team, r.home_team, r.home_elo_prob);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.date}</td>
+      <td class="team-name"></td>
+      <td class="pick-team"></td>
+      <td>${(prob * 100).toFixed(1)}%</td>
+      <td class="${r.correct ? 'result-correct' : 'result-incorrect'}"></td>
+    `;
+    tr.querySelector('.team-name').textContent = `${r.away_team} @ ${r.home_team}`;
+    tr.querySelector('.pick-team').textContent = picked;
+    tr.querySelector('.result-correct, .result-incorrect').textContent = r.correct ? 'Correct' : 'Incorrect';
+    body.appendChild(tr);
+  }
+}
+
 document.querySelectorAll('#ranks-table th').forEach(th => {
   th.addEventListener('click', () => {
     const key = th.dataset.key;
@@ -678,6 +822,8 @@ fetch(DATA_URL)
     footer.innerHTML = 'mlb-elo &mdash; a from-scratch Elo rating engine. <a href="https://github.com/MathewsGreg/mlb-elo">Source on GitHub</a>';
 
     renderAll();
+    renderUpcoming();
+    renderScorecard();
   })
   .catch(err => {
     document.getElementById('subtitle').textContent = 'Failed to load data.json: ' + err.message;

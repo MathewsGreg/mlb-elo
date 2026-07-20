@@ -37,6 +37,21 @@ CREATE TABLE IF NOT EXISTS pitcher_game_logs (
     strikeouts INTEGER NOT NULL,
     PRIMARY KEY (pitcher_id, game_date)
 );
+
+CREATE TABLE IF NOT EXISTS predictions (
+    game_pk INTEGER PRIMARY KEY,
+    predicted_at TEXT NOT NULL,
+    official_date TEXT NOT NULL,
+    season INTEGER NOT NULL,
+    home_team_id INTEGER NOT NULL,
+    home_team_name TEXT NOT NULL,
+    away_team_id INTEGER NOT NULL,
+    away_team_name TEXT NOT NULL,
+    home_elo_prob REAL NOT NULL,
+    home_pitcher_fip REAL,
+    away_pitcher_fip REAL,
+    vegas_home_prob REAL
+);
 """
 
 GAMES_PITCHER_COLUMNS = [
@@ -91,6 +106,26 @@ def set_probable_pitchers(conn: sqlite3.Connection, rows: list[dict]) -> None:
             away_pitcher_id = :away_pitcher_id,
             away_pitcher_name = :away_pitcher_name
         WHERE game_pk = :game_pk
+        """,
+        rows,
+    )
+    conn.commit()
+
+
+def insert_predictions(conn: sqlite3.Connection, rows: list[dict]) -> None:
+    """Write-once: a game_pk already in predictions is left untouched, so a
+    prediction always reflects what was said before the game, never hindsight."""
+    conn.executemany(
+        """
+        INSERT OR IGNORE INTO predictions (
+            game_pk, predicted_at, official_date, season,
+            home_team_id, home_team_name, away_team_id, away_team_name,
+            home_elo_prob, home_pitcher_fip, away_pitcher_fip, vegas_home_prob
+        ) VALUES (
+            :game_pk, :predicted_at, :official_date, :season,
+            :home_team_id, :home_team_name, :away_team_id, :away_team_name,
+            :home_elo_prob, :home_pitcher_fip, :away_pitcher_fip, :vegas_home_prob
+        )
         """,
         rows,
     )

@@ -87,6 +87,76 @@ def season_records(conn, season: int) -> dict[str, dict]:
     return records
 
 
+def upcoming_predictions(conn) -> list[dict]:
+    """Logged predictions for games that haven't been played yet. games only
+    ever stores rows for Final games (see mlb_api.parse_final_game), so a
+    not-yet-played game has no games row at all — left join, not inner."""
+    cur = conn.execute(
+        """
+        SELECT p.official_date, p.away_team_name, p.home_team_name, p.home_elo_prob, p.vegas_home_prob
+        FROM predictions p
+        LEFT JOIN games g ON g.game_pk = p.game_pk
+        WHERE g.status IS NULL OR g.status != 'Final'
+        ORDER BY p.official_date, p.game_pk
+        """
+    )
+    return [
+        {
+            "date": date_,
+            "away_team": away,
+            "home_team": home,
+            "home_elo_prob": round(home_prob, 3),
+            "vegas_home_prob": round(vegas_prob, 3) if vegas_prob is not None else None,
+        }
+        for date_, away, home, home_prob, vegas_prob in cur.fetchall()
+    ]
+
+
+def prediction_scorecard(conn) -> dict:
+    """Score every graded (game now Final) prediction against what actually
+    happened: straight-up record and Brier score. home_elo_prob was logged
+    before the game via predict.py and is never overwritten, so this is a
+    true out-of-sample record, not hindsight."""
+    cur = conn.execute(
+        """
+        SELECT p.official_date, p.away_team_name, p.home_team_name,
+               p.home_elo_prob, p.vegas_home_prob, g.home_win
+        FROM predictions p
+        JOIN games g ON g.game_pk = p.game_pk
+        WHERE g.status = 'Final'
+        ORDER BY p.official_date, p.game_pk
+        """
+    )
+    rows = cur.fetchall()
+
+    graded = []
+    correct = 0
+    brier_sum = 0.0
+    for date_, away, home, home_prob, vegas_prob, home_win in rows:
+        picked_home = home_prob >= 0.5
+        won_pick = bool(picked_home) == bool(home_win)
+        correct += int(won_pick)
+        brier_sum += (home_prob - home_win) ** 2
+        graded.append({
+            "date": date_,
+            "away_team": away,
+            "home_team": home,
+            "home_elo_prob": round(home_prob, 3),
+            "vegas_home_prob": round(vegas_prob, 3) if vegas_prob is not None else None,
+            "home_won": bool(home_win),
+            "correct": won_pick,
+        })
+
+    n = len(rows)
+    return {
+        "graded_games": n,
+        "correct": correct,
+        "incorrect": n - correct,
+        "brier_score": round(brier_sum / n, 4) if n else None,
+        "recent": graded[-20:],
+    }
+
+
 def load_espn_snapshot() -> dict:
     with open(ESPN_SNAPSHOT_PATH, encoding="utf-8") as f:
         snapshot = json.load(f)
@@ -119,6 +189,8 @@ def main() -> None:
     engine, latest_season, history = replay(conn, games)
     records = season_records(conn, latest_season)
     espn = load_espn_snapshot()
+    upcoming = upcoming_predictions(conn)
+    scorecard = prediction_scorecard(conn)
     conn.close()
 
     standings = engine.standings()  # [(name, rating), ...] sorted desc
@@ -154,6 +226,8 @@ def main() -> None:
         "espn_source_label": espn["source_label"],
         "espn_as_of": espn["as_of"],
         "teams": teams,
+        "upcoming_predictions": upcoming,
+        "prediction_scorecard": scorecard,
     }
 
     DOCS_DIR.mkdir(exist_ok=True)

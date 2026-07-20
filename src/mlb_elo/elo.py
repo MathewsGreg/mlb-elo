@@ -33,6 +33,28 @@ def expected_win_prob(rating_a: float, rating_b: float) -> float:
     return 1.0 / (1.0 + 10 ** (-(rating_a - rating_b) / 400.0))
 
 
+def pitcher_elo_adjustment(
+    home_pitcher_fip: float | None, away_pitcher_fip: float | None
+) -> float:
+    if home_pitcher_fip is None or away_pitcher_fip is None:
+        return 0.0
+    return (away_pitcher_fip - home_pitcher_fip) * PITCHER_ELO_SCALE
+
+
+def predict_win_prob(
+    home_rating: float,
+    away_rating: float,
+    home_pitcher_fip: float | None = None,
+    away_pitcher_fip: float | None = None,
+) -> float:
+    """Pregame home win probability from current ratings alone — no outcome
+    involved, so this is safe to call on games that haven't been played yet.
+    Shares its formula with EloEngine.process_game (which additionally uses
+    the actual outcome to update ratings after the fact)."""
+    adjustment = pitcher_elo_adjustment(home_pitcher_fip, away_pitcher_fip)
+    return expected_win_prob(home_rating + HOME_ADVANTAGE + adjustment, away_rating)
+
+
 def mov_multiplier(elo_diff: float, run_diff: int) -> float:
     """Scale the rating update by how lopsided the game was.
 
@@ -80,9 +102,7 @@ class EloEngine:
         home_rating = self.get_rating(home_team_id)
         away_rating = self.get_rating(away_team_id)
 
-        pitcher_adjustment = 0.0
-        if home_pitcher_fip is not None and away_pitcher_fip is not None:
-            pitcher_adjustment = (away_pitcher_fip - home_pitcher_fip) * PITCHER_ELO_SCALE
+        pitcher_adjustment = pitcher_elo_adjustment(home_pitcher_fip, away_pitcher_fip)
 
         expected_home = expected_win_prob(
             home_rating + HOME_ADVANTAGE + pitcher_adjustment, away_rating

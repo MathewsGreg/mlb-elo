@@ -34,6 +34,11 @@ To recreate it from scratch:
 `docs/index.html` is a static, GitHub Pages–hosted dashboard, live at
 https://mathewsgreg.github.io/mlb-elo/:
 
+- **Upcoming games & predictions** — every game logged by `predict.py`
+  that hasn't been played yet, with the model's picked winner and win
+  probability (Vegas column present but empty until odds are wired up)
+- **Track record** — Brier score and straight-up record (e.g. "17-13") on
+  every graded prediction, plus a recent-picks table marked correct/incorrect
 - Current Elo rankings next to an ESPN RPI comparison (rank delta highlighted)
 - An interactive Elo trajectory chart for the current season (pick one or two
   teams to trace; the rest render as gray context)
@@ -42,14 +47,27 @@ https://mathewsgreg.github.io/mlb-elo/:
   below-average-Elo team sitting in good run-differential territory) flags
   where the model and raw run output disagree
 
-To refresh it after pulling new results:
+**Daily refresh** (do this before that day's games start, so predictions stay
+genuinely pregame):
 
 ```
+"C:\Users\Diggs\venvs\mlb_elo\Scripts\python.exe" scripts/fetch_history.py 2026
+"C:\Users\Diggs\venvs\mlb_elo\Scripts\python.exe" scripts/backfill_pitchers.py
+"C:\Users\Diggs\venvs\mlb_elo\Scripts\python.exe" scripts/fetch_pitcher_stats.py
+"C:\Users\Diggs\venvs\mlb_elo\Scripts\python.exe" scripts/predict.py
 "C:\Users\Diggs\venvs\mlb_elo\Scripts\python.exe" scripts/export_dashboard.py
 ```
 
-This replays `data/mlb.db` and writes `docs/data.json`, which `docs/index.html`
-fetches at load time. Commit and push both files to update the published page.
+`predict.py` logs a prediction for every not-yet-started game on a given date
+(today by default; pass `YYYY-MM-DD` for another date) and **never overwrites
+an existing one** — a prediction always reflects what the model said before
+the game, so the track record can't quietly become hindsight. `export_dashboard.py`
+just reads what's already logged; it doesn't create predictions itself.
+
+`export_dashboard.py` replays `data/mlb.db` and writes `docs/data.json`, which
+`docs/index.html` fetches at load time. Commit and push both files (and
+`data/mlb.db`'s new `predictions` table only lives locally — the JSON export
+is what actually ships) to update the published page.
 
 `docs/espn_rpi.json` is a manually captured snapshot of ESPN's MLB RPI table
 (https://www.espn.com/mlb/stats/rpi/_/sort/sos) — there's no public API for it, so
@@ -74,45 +92,48 @@ then open http://localhost:8791/.
 - `scripts/backfill_pitchers.py` — fills in `home_pitcher_id`/`away_pitcher_id` on 2026 games (done; re-run periodically to catch newer games)
 - `scripts/fetch_pitcher_stats.py` — pulls per-start game logs for every 2026 starter (done; re-run periodically to keep FIP current)
 - `scripts/build_ratings.py` — replays all stored games and prints current ratings (done)
-- `scripts/export_dashboard.py` — exports ratings, season history, and the ESPN RPI comparison to `docs/data.json` (done)
+- `scripts/predict.py` — logs a win-probability prediction for each not-yet-started game on a date, write-once (done)
+- `scripts/export_dashboard.py` — exports ratings, season history, ESPN RPI comparison, upcoming predictions, and the graded track record to `docs/data.json` (done)
 - `docs/index.html` — static dashboard, GitHub Pages–hosted (done)
 
 The pitcher adjustment only applies to 2026 games where both starters have
 logged at least 32 innings this season (see `fip.MIN_OUTS_FOR_FIP`) — early
 starts and 2023-2025 fall back to team-strength-only. `elo.PITCHER_ELO_SCALE`
 (Elo points per run of FIP gap between starters) is a documented estimate,
-not a backtested constant — worth revisiting if predictions skew.
+not a backtested constant — worth revisiting if predictions skew, which the
+track record building up in `predictions` should now make visible over time.
 
 Refresh order for 2026 pitcher data: `backfill_pitchers.py` →
-`fetch_pitcher_stats.py` → `export_dashboard.py`.
+`fetch_pitcher_stats.py` → `export_dashboard.py`. Full daily order (including
+predictions) is in the Dashboard section above.
 
-Next: park adjustment; next-day predictions for unplayed games; log Vegas
-closing lines and compute Brier score to check calibration and accuracy.
-See "Roadmap" below for the concrete plan on the last two.
+Next: park adjustment; Vegas comparison once an API key exists; a full-history
+Brier/calibration backtest (distinct from the live track record — see Roadmap
+item 2 below, still not built).
 
-## Roadmap: predictions, Vegas, and calibration
+## Roadmap: Vegas comparison and a full-history calibration backtest
 
-Not built yet. Captured here so a future session can pick this up without
-re-deriving the design.
+**1. Vegas closing-line comparison (blocked on an API key)**
+Needs [The Odds API](https://the-odds-api.com) (free tier, ~500 requests/month,
+no credit card) — sign up, then drop the key in a new `.env` file (already
+gitignored) as `ODDS_API_KEY=...`. Once that exists:
+- Fetch the `h2h` (moneyline) market for upcoming MLB games.
+- **Devig** the two-sided moneyline into a fair win probability — raw implied
+  probability from odds always sums to >100% (the bookmaker's margin), so
+  normalize the two sides to sum to 1 before treating it as a probability.
+- Write it into `predictions.vegas_home_prob` (the column already exists,
+  currently always `NULL`) at the same time `predict.py` logs the Elo pick,
+  keyed by the same `game_pk` — `export_dashboard.py`'s scorecard and upcoming
+  list already read that column, so the dashboard picks it up with no further
+  changes once it's populated.
+- This can only accumulate going forward (the free tier doesn't offer
+  historical odds), so the earlier this starts logging, the sooner there's a
+  meaningful sample to compare Brier scores head-to-head against Vegas.
 
-**1. Predict unplayed games (`scripts/predict.py`, not yet written)**
-No blockers, buildable immediately:
-- Replay `data/mlb.db` (same as `build_ratings.py`/`export_dashboard.py`) to
-  get each team's current rating.
-- Pull an upcoming date's schedule with `hydrate=probablePitcher` (same call
-  `backfill_pitchers.py` already makes, just for a future date instead of
-  backfilling the past).
-- For each matchup, look up `fip.fip_as_of(conn, pitcher_id, today)` for both
-  starters (same no-lookahead function already used in the replay) and factor
-  in the home team's rating.
-- Compute the win probability **without** calling `EloEngine.process_game`
-  (that both predicts *and* updates ratings from a known outcome — there is
-  no outcome yet). Pull the prediction math (home-field + pitcher adjustment
-  + `expected_win_prob`) out of `process_game` into a small reusable function
-  in `elo.py` so both paths share it instead of duplicating the formula.
-
-**2. Brier score / calibration backtest (no new script yet)**
-Also buildable immediately, and doesn't require waiting for new games: every
+**2. Full-history Brier/calibration backtest (no new script yet)**
+The live track record on the dashboard only scores predictions made *going
+forward* from whenever `predict.py` started running — meaningful, but small
+and slow to accumulate. Separately, and with no blockers: every
 historical game already has a "pregame" prediction implicit in the replay —
 the `expected_home` value computed right before each rating update, built
 only from information available before that game (no lookahead, by
@@ -128,19 +149,3 @@ replayed games and score it:
 - Worth comparing pitcher-adjusted vs. team-strength-only predictions
   separately, to see whether `PITCHER_ELO_SCALE` (still an unbacktested
   estimate — see Status above) is actually helping or just adding noise.
-
-**3. Vegas closing-line comparison (blocked on an API key)**
-Needs [The Odds API](https://the-odds-api.com) (free tier, ~500 requests/month,
-no credit card) — sign up, then drop the key in a new `.env` file (already
-gitignored) as `ODDS_API_KEY=...`. Once that exists:
-- Fetch the `h2h` (moneyline) market for upcoming MLB games.
-- **Devig** the two-sided moneyline into a fair win probability — raw implied
-  probability from odds always sums to >100% (the bookmaker's margin), so
-  normalize the two sides to sum to 1 before treating it as a probability.
-- Match to our own predictions by team + date, store both side by side, and
-  once outcomes are known, compute Brier score for *both* our model and Vegas
-  over the same games — that's the real test of whether this model is adding
-  anything Vegas doesn't already know.
-- This can only accumulate going forward (the free tier doesn't offer
-  historical odds), so the earlier this starts logging, the sooner there's a
-  meaningful sample.
