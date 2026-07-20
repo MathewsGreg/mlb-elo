@@ -43,8 +43,14 @@ def calibration_table(rows: list[tuple[float, int]]) -> list[tuple[float, float,
     return table
 
 
-def main() -> None:
-    conn = db.connect()
+def run_replay(conn) -> dict:
+    """Replay full history once using elo.py/fip.py's *current* module-level
+    constants and return the raw (prediction, outcome) pairs needed to score
+    them. Callers that want to try different constants (see
+    scripts/calibrate.py) should monkeypatch the elo/fip modules' globals
+    before calling this -- process_game, predict_win_prob, and fip_as_of all
+    read their tuning constants at call time, so patching the module
+    attribute is enough; no plumbing them through as arguments."""
     cur = conn.execute(
         """
         SELECT season, official_date, home_team_id, home_team_name,
@@ -94,7 +100,23 @@ def main() -> None:
             away_pitcher_fip=away_fip,
         )
 
+    return {
+        "latest_season": latest_season,
+        "all_predictions": all_predictions,
+        "pitcher_subset_adjusted": pitcher_subset_adjusted,
+        "pitcher_subset_team_only": pitcher_subset_team_only,
+    }
+
+
+def main() -> None:
+    conn = db.connect()
+    result = run_replay(conn)
     conn.close()
+
+    latest_season = result["latest_season"]
+    all_predictions = result["all_predictions"]
+    pitcher_subset_adjusted = result["pitcher_subset_adjusted"]
+    pitcher_subset_team_only = result["pitcher_subset_team_only"]
 
     print(f"{len(all_predictions)} games replayed, {latest_season} is the latest season.\n")
 

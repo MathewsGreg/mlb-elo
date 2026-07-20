@@ -14,18 +14,19 @@ from dataclasses import dataclass, field
 import math
 
 DEFAULT_RATING = 1500.0
-HOME_ADVANTAGE = 24.0
-K_BASE = 4.0
+HOME_ADVANTAGE = 24.0  # grid-searched against the full-history Brier score in scripts/calibrate.py; already near-optimal
+K_BASE = 4.0  # same -- also already near-optimal
 SEASON_REGRESSION = 1.0 / 3.0  # fraction reverted toward the mean each new season
 
-# Elo points per 1.00 run of FIP gap between the two starters, applied only
-# to that game's expected-win-probability (not a persistent rating, same
-# mechanism as HOME_ADVANTAGE). Unlike HOME_ADVANTAGE and K_BASE, this has
-# no published reference value to anchor on — it's a starting estimate
-# (a full run of FIP is a real quality gap, made worth a bit more than two
-# home-field advantages) and should be revisited by backtesting prediction
-# accuracy with it on vs. off, not treated as calibrated.
-PITCHER_ELO_SCALE = 25.0
+# Elo points per 1.00 run of (shrunk) FIP gap between the two starters,
+# applied only to that game's expected-win-probability (not a persistent
+# rating, same mechanism as HOME_ADVANTAGE). Calibrated jointly with
+# fip.FIP_SHRINKAGE_IP via scripts/calibrate.py: the original hand-picked
+# guess of 25 turned out to be too aggressive relative to how noisy a
+# single start's FIP is, which is what made the pitcher adjustment score
+# worse than team-strength-only in the first full-history backtest -- see
+# scripts/backtest.py's pitcher-adjusted-vs-team-only comparison.
+PITCHER_ELO_SCALE = 10.0
 
 
 def expected_win_prob(rating_a: float, rating_b: float) -> float:

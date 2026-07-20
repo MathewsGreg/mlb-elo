@@ -95,24 +95,30 @@ then open http://localhost:8791/.
 - `scripts/build_ratings.py` — replays all stored games and prints current ratings (done)
 - `scripts/predict.py` — logs a win-probability prediction for each not-yet-started game on a date, write-once (done)
 - `scripts/backtest.py` — full-history Brier score + calibration table from the replay's implicit pregame predictions, plus pitcher-adjusted vs. team-strength-only on the current season's subset (done)
+- `scripts/calibrate.py` — grid-searches `HOME_ADVANTAGE`, `K_BASE`, `PITCHER_ELO_SCALE`, and `fip.FIP_SHRINKAGE_IP` against the backtest instead of leaving them as hand-picked guesses (done)
 - `scripts/fetch_odds.py` — pulls devigged Vegas moneyline probabilities from The Odds API into `predictions.vegas_home_prob`, write-once, ~1 request/day (done; needs `ODDS_API_KEY` in `.env`)
 - `scripts/export_dashboard.py` — exports ratings, season history, ESPN RPI comparison, upcoming predictions, and the graded track record to `docs/data.json` (done)
 - `docs/index.html` — static dashboard, GitHub Pages–hosted (done)
 
-The pitcher adjustment only applies to 2026 games where both starters have
-logged at least 32 innings this season (see `fip.MIN_OUTS_FOR_FIP`) — early
-starts and 2023-2025 fall back to team-strength-only. `elo.PITCHER_ELO_SCALE`
-(Elo points per run of FIP gap between starters) is a documented estimate,
-not a backtested constant — worth revisiting if predictions skew, which the
-track record building up in `predictions` should now make visible over time.
+The pitcher adjustment applies to any 2026 game where both starters have
+thrown at least one logged inning this season; earlier seasons fall back to
+team-strength-only. Rather than gating on a fixed innings cutoff, a
+pitcher's FIP is shrunk toward `fip.LEAGUE_AVG_FIP` proportional to how few
+innings back it (`fip.FIP_SHRINKAGE_IP`) — a pitcher with only a handful of
+starts sits close to league average, one with a full season's innings keeps
+almost all of his own number. `elo.PITCHER_ELO_SCALE` and
+`fip.FIP_SHRINKAGE_IP` were grid-searched jointly against the backtest by
+`scripts/calibrate.py`, not hand-picked — see Roadmap item 2 below for what
+that search found and why the original guess (no shrinkage, `PITCHER_ELO_SCALE
+= 25`) was actually hurting predictions.
 
 Refresh order for 2026 pitcher data: `backfill_pitchers.py` →
 `fetch_pitcher_stats.py` → `export_dashboard.py`. Full daily order (including
 predictions) is in the Dashboard section above.
 
-Next: park adjustment; recalibrate or drop `PITCHER_ELO_SCALE` (see Roadmap
-below — the full-history backtest shows it currently hurting, not helping);
-accumulate enough live Vegas lines for a head-to-head Brier comparison.
+Next: park adjustment; accumulate enough live Vegas lines for a head-to-head
+Brier comparison; a recency-weighted (rather than full-season) pitcher
+sample now that the shrinkage is in place.
 
 ## Roadmap: Vegas comparison and a full-history calibration backtest
 
@@ -143,17 +149,45 @@ computed right before each rating update, built only from information
 available before that game (no lookahead, by construction):
 - **Brier score**: `mean((predicted_prob - actual_outcome)^2)` — lower is
   better, 0.25 is what an always-50% model scores, 0 is a psychic. Current
-  full-history result: **0.2448** across 8,766 games — in the right range for
+  full-history result: **0.2446** across 8,766 games — in the right range for
   MLB (538's Elo has historically run ~0.23-0.24; a sharp Vegas book is
   typically ~0.20-0.21) but with real room to close the gap.
 - **Calibration table**: buckets predictions into 10% bins and checks
   whether the actual home-win rate in each bucket matches the bucket's
   midpoint — this looks reasonably well-calibrated (e.g. 60-70% predicted →
-  61.2% actual), so the model isn't systematically over/underconfident, it's
+  61.3% actual), so the model isn't systematically over/underconfident, it's
   just not very sharp yet.
 - **Pitcher-adjusted vs. team-strength-only**, compared on the same subset of
-  2026 games with FIP for both starters: pitcher-adjusted Brier (0.2523) is
-  currently *worse* than team-strength-only on those same games (0.2510).
-  `PITCHER_ELO_SCALE` (see Status above) needs recalibrating, or should be
-  turned off until it is — this is the single highest-value fix the backtest
-  surfaced.
+  2026 games with FIP for both starters. The *first* version of this
+  comparison (flat `PITCHER_ELO_SCALE = 25`, no shrinkage, gated on a hard
+  32-inning cutoff) found the pitcher adjustment scoring *worse*
+  (0.2523) than team-strength-only (0.2510) on those same 618 games — a raw
+  FIP is dominated by home-run rate, which is noisy over the small samples
+  (often 6-10 starts) the cutoff let through, and the adjustment's average
+  swing (~27 Elo points) was nearly as large as the average team-strength
+  gap it was added to (~45 points): a volatile stat given as much weight as
+  the far more reliable team rating.
+
+**3. Shrinkage + calibration (done — `fip.py` shrinkage, `scripts/calibrate.py`)**
+Fixing item 2's finding took two changes:
+- `fip.fip_as_of` now shrinks a pitcher's FIP toward `LEAGUE_AVG_FIP`,
+  weighted by innings pitched against `FIP_SHRINKAGE_IP` — a few starts sits
+  close to league average, a full season keeps almost all of a pitcher's own
+  number, and the transition is continuous instead of a cliff at a fixed
+  innings cutoff.
+- `scripts/calibrate.py` grid-searches `HOME_ADVANTAGE`, `K_BASE`,
+  `PITCHER_ELO_SCALE`, and `FIP_SHRINKAGE_IP` against the backtest rather
+  than leaving them as guesses. `HOME_ADVANTAGE` (24) and `K_BASE` (4) both
+  turned out to already be close to optimal. `PITCHER_ELO_SCALE` and
+  `FIP_SHRINKAGE_IP` trade off against each other almost perfectly (a bigger
+  scale plus heavier shrinkage can reproduce nearly the same effective
+  adjustment as a smaller scale plus lighter shrinkage), so the search
+  keeps whichever value is within a small tolerance of the best score *and*
+  closest to the current default/smallest in magnitude — otherwise a plain
+  grid search chases that flat ridge out to whatever the most extreme
+  tested value is, which isn't a real finding, just noise. That search
+  landed on `PITCHER_ELO_SCALE = 10` (down from 25) and `FIP_SHRINKAGE_IP =
+  20`. With both changes, the same pitcher-vs-team-only comparison now
+  reads **0.2487 vs. 0.2489** on the (now much larger, since there's no hard
+  cutoff) 1,349-game subset — a small, believable edge instead of a
+  measurable loss.
