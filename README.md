@@ -55,6 +55,7 @@ genuinely pregame):
 "C:\Users\Diggs\venvs\mlb_elo\Scripts\python.exe" scripts/backfill_pitchers.py
 "C:\Users\Diggs\venvs\mlb_elo\Scripts\python.exe" scripts/fetch_pitcher_stats.py
 "C:\Users\Diggs\venvs\mlb_elo\Scripts\python.exe" scripts/predict.py
+"C:\Users\Diggs\venvs\mlb_elo\Scripts\python.exe" scripts/fetch_odds.py
 "C:\Users\Diggs\venvs\mlb_elo\Scripts\python.exe" scripts/export_dashboard.py
 ```
 
@@ -93,6 +94,8 @@ then open http://localhost:8791/.
 - `scripts/fetch_pitcher_stats.py` — pulls per-start game logs for every 2026 starter (done; re-run periodically to keep FIP current)
 - `scripts/build_ratings.py` — replays all stored games and prints current ratings (done)
 - `scripts/predict.py` — logs a win-probability prediction for each not-yet-started game on a date, write-once (done)
+- `scripts/backtest.py` — full-history Brier score + calibration table from the replay's implicit pregame predictions, plus pitcher-adjusted vs. team-strength-only on the current season's subset (done)
+- `scripts/fetch_odds.py` — pulls devigged Vegas moneyline probabilities from The Odds API into `predictions.vegas_home_prob`, write-once, ~1 request/day (done; needs `ODDS_API_KEY` in `.env`)
 - `scripts/export_dashboard.py` — exports ratings, season history, ESPN RPI comparison, upcoming predictions, and the graded track record to `docs/data.json` (done)
 - `docs/index.html` — static dashboard, GitHub Pages–hosted (done)
 
@@ -107,45 +110,50 @@ Refresh order for 2026 pitcher data: `backfill_pitchers.py` →
 `fetch_pitcher_stats.py` → `export_dashboard.py`. Full daily order (including
 predictions) is in the Dashboard section above.
 
-Next: park adjustment; Vegas comparison once an API key exists; a full-history
-Brier/calibration backtest (distinct from the live track record — see Roadmap
-item 2 below, still not built).
+Next: park adjustment; recalibrate or drop `PITCHER_ELO_SCALE` (see Roadmap
+below — the full-history backtest shows it currently hurting, not helping);
+accumulate enough live Vegas lines for a head-to-head Brier comparison.
 
 ## Roadmap: Vegas comparison and a full-history calibration backtest
 
-**1. Vegas closing-line comparison (blocked on an API key)**
-Needs [The Odds API](https://the-odds-api.com) (free tier, ~500 requests/month,
-no credit card) — sign up, then drop the key in a new `.env` file (already
-gitignored) as `ODDS_API_KEY=...`. Once that exists:
-- Fetch the `h2h` (moneyline) market for upcoming MLB games.
-- **Devig** the two-sided moneyline into a fair win probability — raw implied
-  probability from odds always sums to >100% (the bookmaker's margin), so
-  normalize the two sides to sum to 1 before treating it as a probability.
-- Write it into `predictions.vegas_home_prob` (the column already exists,
-  currently always `NULL`) at the same time `predict.py` logs the Elo pick,
-  keyed by the same `game_pk` — `export_dashboard.py`'s scorecard and upcoming
-  list already read that column, so the dashboard picks it up with no further
-  changes once it's populated.
+**1. Vegas closing-line comparison (done; needs your own API key to run)**
+Sign up at [The Odds API](https://the-odds-api.com) (free tier, ~500
+requests/month, no credit card — costs 1 request per `fetch_odds.py` run,
+regardless of how many games are in that day's slate), then drop the key in
+a new `.env` file (already gitignored) in the project root as
+`ODDS_API_KEY=...`. `scripts/fetch_odds.py` then:
+- Fetches the `h2h` (moneyline) market for upcoming MLB games.
+- **Devigs** each bookmaker's two-sided price into a fair win probability
+  (raw implied probability sums to >100% because of the bookmaker's margin)
+  and averages across whichever bookmakers the free tier returns.
+- Writes it into `predictions.vegas_home_prob`, write-once like `predict.py`,
+  matched to the same game by home/away team name. `export_dashboard.py`'s
+  scorecard and upcoming list already read that column, so the dashboard
+  picks it up automatically once it's populated.
 - This can only accumulate going forward (the free tier doesn't offer
   historical odds), so the earlier this starts logging, the sooner there's a
   meaningful sample to compare Brier scores head-to-head against Vegas.
 
-**2. Full-history Brier/calibration backtest (no new script yet)**
+**2. Full-history Brier/calibration backtest (done — `scripts/backtest.py`)**
 The live track record on the dashboard only scores predictions made *going
 forward* from whenever `predict.py` started running — meaningful, but small
-and slow to accumulate. Separately, and with no blockers: every
-historical game already has a "pregame" prediction implicit in the replay —
-the `expected_home` value computed right before each rating update, built
-only from information available before that game (no lookahead, by
-construction). Capture that value alongside the actual outcome for all 8,735+
-replayed games and score it:
+and slow to accumulate. `scripts/backtest.py` instead scores every
+historical game's implicit pregame prediction — the `expected_home` value
+computed right before each rating update, built only from information
+available before that game (no lookahead, by construction):
 - **Brier score**: `mean((predicted_prob - actual_outcome)^2)` — lower is
-  better, 0.25 is what an always-50% model scores, 0 is a psychic.
-- **Reliability/calibration curve**: bucket predictions (e.g. 0-10%, 10-20%,
-  ... 90-100%) and check whether the actual home-win rate in each bucket
-  matches the bucket's midpoint. This is the real calibration check — Brier
-  score alone can hide a model that's accurate on average but miscalibrated
-  in the tails (overconfident favorites, underconfident dogs, etc).
-- Worth comparing pitcher-adjusted vs. team-strength-only predictions
-  separately, to see whether `PITCHER_ELO_SCALE` (still an unbacktested
-  estimate — see Status above) is actually helping or just adding noise.
+  better, 0.25 is what an always-50% model scores, 0 is a psychic. Current
+  full-history result: **0.2448** across 8,766 games — in the right range for
+  MLB (538's Elo has historically run ~0.23-0.24; a sharp Vegas book is
+  typically ~0.20-0.21) but with real room to close the gap.
+- **Calibration table**: buckets predictions into 10% bins and checks
+  whether the actual home-win rate in each bucket matches the bucket's
+  midpoint — this looks reasonably well-calibrated (e.g. 60-70% predicted →
+  61.2% actual), so the model isn't systematically over/underconfident, it's
+  just not very sharp yet.
+- **Pitcher-adjusted vs. team-strength-only**, compared on the same subset of
+  2026 games with FIP for both starters: pitcher-adjusted Brier (0.2523) is
+  currently *worse* than team-strength-only on those same games (0.2510).
+  `PITCHER_ELO_SCALE` (see Status above) needs recalibrating, or should be
+  turned off until it is — this is the single highest-value fix the backtest
+  surfaced.

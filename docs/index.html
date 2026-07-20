@@ -216,6 +216,7 @@
     <p class="section-note">Straight-up record and Brier score on graded predictions (lower is better &mdash; 0.25 is a coin flip, 0 is perfect).</p>
     <p class="empty-note" id="scorecard-empty" style="display:none;">No graded predictions yet &mdash; check back after today's games finish.</p>
     <div class="stat-row" id="scorecard-stats"></div>
+    <div id="vegas-comparison" style="margin-top:1rem;"></div>
     <div class="table-scroll" id="recent-wrap" style="margin-top:1rem;">
       <table id="recent-table">
         <thead>
@@ -224,6 +225,7 @@
             <th>Matchup</th>
             <th>Elo Pick</th>
             <th>Win%</th>
+            <th>Vegas Pick</th>
             <th>Result</th>
           </tr>
         </thead>
@@ -705,8 +707,10 @@ function pickFromHomeProb(awayTeam, homeTeam, homeProb) {
     : { picked: awayTeam, prob: 1 - homeProb };
 }
 
-function vegasCell(vegasProb) {
-  return vegasProb === null || vegasProb === undefined ? '&mdash;' : (vegasProb * 100).toFixed(1) + '%';
+function vegasCell(awayTeam, homeTeam, vegasProb) {
+  if (vegasProb === null || vegasProb === undefined) return '&mdash;';
+  const { picked, prob } = pickFromHomeProb(awayTeam, homeTeam, vegasProb);
+  return `${picked} ${(prob * 100).toFixed(1)}%`;
 }
 
 function renderUpcoming() {
@@ -731,7 +735,7 @@ function renderUpcoming() {
       <td class="team-name"></td>
       <td class="pick-team"></td>
       <td>${(prob * 100).toFixed(1)}%</td>
-      <td>${vegasCell(r.vegas_home_prob)}</td>
+      <td>${vegasCell(r.away_team, r.home_team, r.vegas_home_prob)}</td>
     `;
     tr.querySelector('.team-name').textContent = `${r.away_team} @ ${r.home_team}`;
     tr.querySelector('.pick-team').textContent = picked;
@@ -748,6 +752,7 @@ function renderScorecard() {
   if (!sc.graded_games) {
     statsEl.style.display = 'none';
     recentWrap.style.display = 'none';
+    document.getElementById('vegas-comparison').style.display = 'none';
     empty.style.display = 'block';
     return;
   }
@@ -778,6 +783,7 @@ function renderScorecard() {
       <td class="team-name"></td>
       <td class="pick-team"></td>
       <td>${(prob * 100).toFixed(1)}%</td>
+      <td>${vegasCell(r.away_team, r.home_team, r.vegas_home_prob)}</td>
       <td class="${r.correct ? 'result-correct' : 'result-incorrect'}"></td>
     `;
     tr.querySelector('.team-name').textContent = `${r.away_team} @ ${r.home_team}`;
@@ -785,6 +791,23 @@ function renderScorecard() {
     tr.querySelector('.result-correct, .result-incorrect').textContent = r.correct ? 'Correct' : 'Incorrect';
     body.appendChild(tr);
   }
+
+  const vc = sc.vegas_comparison;
+  const vcWrap = document.getElementById('vegas-comparison');
+  if (!vc) {
+    vcWrap.style.display = 'none';
+    return;
+  }
+  vcWrap.style.display = '';
+  const eloWinPct = (vc.elo_correct / vc.graded_games * 100).toFixed(1);
+  const vegasWinPct = (vc.vegas_correct / vc.graded_games * 100).toFixed(1);
+  vcWrap.innerHTML = `
+    <p class="section-note">Elo vs. Vegas, on the ${vc.graded_games} graded game${vc.graded_games === 1 ? '' : 's'} that had a logged line:</p>
+    <div class="stat-row">
+      <div class="stat-tile"><div class="stat-label">Elo record / Brier</div><div class="stat-value">${vc.elo_correct}-${vc.graded_games - vc.elo_correct} (${eloWinPct}%) / ${vc.elo_brier_score.toFixed(4)}</div></div>
+      <div class="stat-tile"><div class="stat-label">Vegas record / Brier</div><div class="stat-value">${vc.vegas_correct}-${vc.graded_games - vc.vegas_correct} (${vegasWinPct}%) / ${vc.vegas_brier_score.toFixed(4)}</div></div>
+    </div>
+  `;
 }
 
 document.querySelectorAll('#ranks-table th').forEach(th => {

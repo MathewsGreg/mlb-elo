@@ -132,6 +132,20 @@ def insert_predictions(conn: sqlite3.Connection, rows: list[dict]) -> None:
     conn.commit()
 
 
+def update_vegas_probs(conn: sqlite3.Connection, rows: list[dict]) -> None:
+    """rows: [{game_pk, vegas_home_prob}]. Only fills a currently-NULL value,
+    same write-once spirit as predictions: once a Vegas line is logged for a
+    game it's never quietly replaced by a later, closer-to-first-pitch pull."""
+    conn.executemany(
+        """
+        UPDATE predictions SET vegas_home_prob = :vegas_home_prob
+        WHERE game_pk = :game_pk AND vegas_home_prob IS NULL
+        """,
+        rows,
+    )
+    conn.commit()
+
+
 def upsert_pitcher_game_logs(conn: sqlite3.Connection, rows: list[dict]) -> None:
     conn.executemany(
         """

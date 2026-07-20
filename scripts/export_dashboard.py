@@ -132,11 +132,30 @@ def prediction_scorecard(conn) -> dict:
     graded = []
     correct = 0
     brier_sum = 0.0
+
+    # Elo vs. Vegas, computed only over the subset of graded games that
+    # actually have a logged line -- comparing full-history Elo Brier
+    # against Vegas-subset Elo Brier would be apples to oranges.
+    vegas_n = 0
+    vegas_correct = 0
+    vegas_brier_sum = 0.0
+    elo_subset_correct = 0
+    elo_subset_brier_sum = 0.0
+
     for date_, away, home, home_prob, vegas_prob, home_win in rows:
         picked_home = home_prob >= 0.5
         won_pick = bool(picked_home) == bool(home_win)
         correct += int(won_pick)
         brier_sum += (home_prob - home_win) ** 2
+
+        if vegas_prob is not None:
+            vegas_n += 1
+            vegas_picked_home = vegas_prob >= 0.5
+            vegas_correct += int(bool(vegas_picked_home) == bool(home_win))
+            vegas_brier_sum += (vegas_prob - home_win) ** 2
+            elo_subset_correct += int(won_pick)
+            elo_subset_brier_sum += (home_prob - home_win) ** 2
+
         graded.append({
             "date": date_,
             "away_team": away,
@@ -153,6 +172,13 @@ def prediction_scorecard(conn) -> dict:
         "correct": correct,
         "incorrect": n - correct,
         "brier_score": round(brier_sum / n, 4) if n else None,
+        "vegas_comparison": {
+            "graded_games": vegas_n,
+            "elo_correct": elo_subset_correct,
+            "elo_brier_score": round(elo_subset_brier_sum / vegas_n, 4),
+            "vegas_correct": vegas_correct,
+            "vegas_brier_score": round(vegas_brier_sum / vegas_n, 4),
+        } if vegas_n else None,
         "recent": graded[-20:],
     }
 
