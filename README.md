@@ -59,6 +59,14 @@ genuinely pregame):
 "C:\Users\Diggs\venvs\mlb_elo\Scripts\python.exe" scripts/export_dashboard.py
 ```
 
+Also glance at ESPN's RPI table (link and manual-refresh steps below) each
+time you run this — it looks like it recalculates continuously off live
+standings rather than posting on a fixed weekly cycle (checked 2026-07-23: a
+snapshot pulled 4 days after the prior one already reflected each team's
+current win/loss record, not a week-old one), so there's no discrete
+"new rankings posted" event to wait for. Refresh `docs/espn_rpi.json`
+whenever it looks stale rather than on a schedule.
+
 `predict.py` logs a prediction for every not-yet-started game on a given date
 (today by default; pass `YYYY-MM-DD` for another date) and **never overwrites
 an existing one** — a prediction always reflects what the model said before
