@@ -70,7 +70,7 @@ def fetch_not_yet_started(game_date: str) -> list[dict]:
     games = []
     for date_entry in payload.get("dates", []):
         for game in date_entry.get("games", []):
-            if game["status"]["abstractGameState"] == "Final":
+            if game["status"]["abstractGameState"] in ("Final", "Live"):
                 continue
             games.append(game)
     return games
