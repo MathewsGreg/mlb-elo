@@ -79,9 +79,13 @@ just reads what's already logged; it doesn't create predictions itself.
 is what actually ships) to update the published page.
 
 `docs/espn_rpi.json` is a manually captured snapshot of ESPN's MLB RPI table
-(https://www.espn.com/mlb/stats/rpi/_/sort/sos) — there's no public API for it, so
+(https://www.espn.com/mlb/stats/rpi) — there's no public API for it, so
 refreshing the comparison means copying the current table into that file by hand
-(team, rpi, wins, losses) and re-running the export script.
+(team, rpi, wins, losses) and re-running the export script. Use that URL as-is
+(the default RPI sort), not a `/_/sort/...` variant: several teams round to the
+same 3-decimal RPI, and copying rows in ESPN's own RPI-sorted order preserves
+their tie-break so our computed rank matches what ESPN displays. Sorting by a
+different column (e.g. `/_/sort/sos`) reorders those ties and throws the rank off.
 
 To preview locally before pushing (fetch() needs an HTTP server, not a `file://` URL):
 
