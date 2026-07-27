@@ -1,14 +1,21 @@
-"""Pull Vegas moneyline odds for upcoming MLB games and log a devigged fair
-home-win probability into predictions.vegas_home_prob, keyed by game_pk.
+"""Pull Vegas moneyline odds for upcoming MLB games. Logs the raw per-
+bookmaker American-odds prices (home_price/away_price, vig included) into
+odds_snapshots, and a devigged fair home-win probability into
+predictions.vegas_home_prob, both keyed by game_pk.
 
 Devigging: a moneyline's raw implied probabilities sum to >100% (the
 bookmaker's margin/vig), so each bookmaker's two-sided price is normalized to
 sum to 1 before being treated as a probability. When multiple bookmakers are
-returned, their devigged probabilities are averaged into one consensus number.
+returned, their devigged probabilities are averaged into one consensus
+number for vegas_home_prob -- but the raw priced odds are kept in
+odds_snapshots too, since answering "can this model beat the spread" (as
+opposed to just "is it better calibrated than the fair-value consensus")
+needs the actual vig-inclusive prices a bet would be placed against.
 
 Only fills predictions that don't have a Vegas number yet (write-once, same
 as predict.py) -- run this once a day, any time after predict.py has logged
-that day's Elo picks.
+that day's Elo picks. odds_snapshots rows are append-only and keyed on
+(game_pk, bookmaker_key, fetched_at), so they're unaffected by that.
 
 Requires ODDS_API_KEY, either already in the environment or in a .env file
 in the project root (KEY=VALUE per line, gitignored). Free tier is ~500
@@ -20,7 +27,7 @@ Usage:
 """
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
@@ -55,22 +62,47 @@ def load_env(env_path: Path = PROJECT_ROOT / ".env") -> None:
         os.environ.setdefault(key.strip(), value.strip())
 
 
-def devig(outcomes: list[dict]) -> float | None:
-    """outcomes: the h2h market's two-team list of {"name", "price"} (American
-    odds). Returns the fair (vig-removed) probability of outcomes[0], or None
-    if it isn't a clean two-sided market."""
-    if len(outcomes) != 2:
-        return None
+def implied_prob(price: int) -> float:
+    """Raw (vig-included) implied probability of a single American-odds price."""
+    return 100 / (price + 100) if price > 0 else -price / (-price + 100)
 
-    implied = []
-    for outcome in outcomes:
-        price = outcome["price"]
-        implied.append(100 / (price + 100) if price > 0 else -price / (-price + 100))
 
-    total = sum(implied)
+def devig_pair(home_price: int, away_price: int) -> float | None:
+    """Fair (vig-removed) home-win probability from a two-sided American-odds
+    price. The two raw implied probabilities sum to >100% -- that excess is
+    the bookmaker's margin -- so this normalizes them to sum to 1."""
+    home_implied, away_implied = implied_prob(home_price), implied_prob(away_price)
+    total = home_implied + away_implied
     if total <= 0:
         return None
-    return implied[0] / total
+    return home_implied / total
+
+
+def bookmaker_prices(event: dict) -> list[dict]:
+    """Raw two-sided moneyline price for each bookmaker in event, oriented so
+    home_price/away_price always refer to the game's home team regardless of
+    the order the API lists outcomes in. Skips any market that isn't a clean
+    two-sided h2h line."""
+    home_team = event["home_team"]
+    away_team = event["away_team"]
+    prices = []
+    for bookmaker in event.get("bookmakers", []):
+        for market in bookmaker.get("markets", []):
+            if market["key"] != "h2h":
+                continue
+            outcomes = market["outcomes"]
+            if len(outcomes) != 2:
+                continue
+            by_name = {o["name"]: o["price"] for o in outcomes}
+            if home_team not in by_name or away_team not in by_name:
+                continue
+            prices.append({
+                "bookmaker_key": bookmaker["key"],
+                "bookmaker_title": bookmaker.get("title", bookmaker["key"]),
+                "home_price": by_name[home_team],
+                "away_price": by_name[away_team],
+            })
+    return prices
 
 
 def fetch_events(api_key: str) -> list[dict]:
@@ -88,20 +120,12 @@ def fetch_events(api_key: str) -> list[dict]:
     return resp.json()
 
 
-def consensus_home_prob(event: dict) -> float | None:
-    home_team = event["home_team"]
-    fair_probs = []
-    for bookmaker in event.get("bookmakers", []):
-        for market in bookmaker.get("markets", []):
-            if market["key"] != "h2h":
-                continue
-            outcomes = market["outcomes"]
-            # devig() expects outcomes[0] to be the team we want the prob for
-            if outcomes[0]["name"] != home_team:
-                outcomes = list(reversed(outcomes))
-            prob = devig(outcomes)
-            if prob is not None:
-                fair_probs.append(prob)
+def consensus_home_prob(prices: list[dict]) -> float | None:
+    """Average of each bookmaker's own devigged fair home-win probability."""
+    fair_probs = [
+        prob for prob in (devig_pair(p["home_price"], p["away_price"]) for p in prices)
+        if prob is not None
+    ]
     if not fair_probs:
         return None
     return sum(fair_probs) / len(fair_probs)
@@ -130,8 +154,10 @@ def main() -> None:
     }
 
     events = fetch_events(api_key)
+    fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     updates = []
+    snapshots = []
     unmatched_events = []
     for event in events:
         key = (commence_date_et(event["commence_time"]), event["home_team"], event["away_team"])
@@ -139,11 +165,17 @@ def main() -> None:
         if game_pk is None:
             unmatched_events.append(f"{event['commence_time']}: {event['away_team']} @ {event['home_team']}")
             continue
-        prob = consensus_home_prob(event)
+
+        prices = bookmaker_prices(event)
+        for price in prices:
+            snapshots.append({"game_pk": game_pk, "fetched_at": fetched_at, **price})
+
+        prob = consensus_home_prob(prices)
         if prob is None:
             continue
         updates.append({"game_pk": game_pk, "vegas_home_prob": round(prob, 4)})
 
+    db.insert_odds_snapshots(conn, snapshots)
     db.update_vegas_probs(conn, updates)
     conn.close()
 

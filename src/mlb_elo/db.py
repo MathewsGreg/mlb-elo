@@ -52,6 +52,21 @@ CREATE TABLE IF NOT EXISTS predictions (
     away_pitcher_fip REAL,
     vegas_home_prob REAL
 );
+
+-- Raw per-bookmaker moneyline prices (American odds), one row per
+-- (game, bookmaker, pull) -- never overwritten. This is the underlying data
+-- behind predictions.vegas_home_prob's devigged consensus average; kept
+-- separately because the single averaged number can't support closing-line
+-- or betting-ROI analysis, which need the actual priced (vig-inclusive) odds.
+CREATE TABLE IF NOT EXISTS odds_snapshots (
+    game_pk INTEGER NOT NULL,
+    fetched_at TEXT NOT NULL,
+    bookmaker_key TEXT NOT NULL,
+    bookmaker_title TEXT NOT NULL,
+    home_price INTEGER NOT NULL,
+    away_price INTEGER NOT NULL,
+    PRIMARY KEY (game_pk, bookmaker_key, fetched_at)
+);
 """
 
 GAMES_PITCHER_COLUMNS = [
@@ -140,6 +155,21 @@ def update_vegas_probs(conn: sqlite3.Connection, rows: list[dict]) -> None:
         """
         UPDATE predictions SET vegas_home_prob = :vegas_home_prob
         WHERE game_pk = :game_pk AND vegas_home_prob IS NULL
+        """,
+        rows,
+    )
+    conn.commit()
+
+
+def insert_odds_snapshots(conn: sqlite3.Connection, rows: list[dict]) -> None:
+    """rows: [{game_pk, fetched_at, bookmaker_key, bookmaker_title, home_price,
+    away_price}]. Append-only raw data -- never updated, so this can later
+    answer questions the single devigged vegas_home_prob average can't."""
+    conn.executemany(
+        """
+        INSERT OR IGNORE INTO odds_snapshots
+            (game_pk, fetched_at, bookmaker_key, bookmaker_title, home_price, away_price)
+        VALUES (:game_pk, :fetched_at, :bookmaker_key, :bookmaker_title, :home_price, :away_price)
         """,
         rows,
     )
