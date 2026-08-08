@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-08-08T16:01:34Z",
+  "generated_at": "2026-08-08T16:46:55Z",
   "season": 2026,
   "games_replayed": 9021,
   "espn_source": "https://www.espn.com/mlb/stats/rpi",
   "espn_source_label": "ESPN MLB Relative Power Index",
-  "espn_as_of": "2026-07-27",
+  "espn_as_of": "2026-08-08",
   "teams": [
     {
       "team": "Milwaukee Brewers",
@@ -16,7 +16,7 @@
       "runs_allowed": 438,
       "runs_scored_per9": 4.97,
       "runs_allowed_per9": 3.78,
-      "rpi": 0.536,
+      "rpi": 0.53,
       "rpi_rank": 1,
       "delta": 0,
       "history": [
@@ -564,9 +564,9 @@
       "runs_allowed": 428,
       "runs_scored_per9": 4.5,
       "runs_allowed_per9": 3.72,
-      "rpi": 0.507,
-      "rpi_rank": 11,
-      "delta": 9,
+      "rpi": 0.518,
+      "rpi_rank": 6,
+      "delta": 4,
       "history": [
         {
           "date": "2026-03-25",
@@ -1112,7 +1112,7 @@
       "runs_allowed": 499,
       "runs_scored_per9": 5.14,
       "runs_allowed_per9": 4.26,
-      "rpi": 0.516,
+      "rpi": 0.522,
       "rpi_rank": 5,
       "delta": 2,
       "history": [
@@ -1660,9 +1660,9 @@
       "runs_allowed": 448,
       "runs_scored_per9": 5.06,
       "runs_allowed_per9": 3.86,
-      "rpi": 0.53,
-      "rpi_rank": 2,
-      "delta": -2,
+      "rpi": 0.522,
+      "rpi_rank": 4,
+      "delta": 0,
       "history": [
         {
           "date": "2026-03-25",
@@ -2208,9 +2208,9 @@
       "runs_allowed": 450,
       "runs_scored_per9": 4.91,
       "runs_allowed_per9": 3.88,
-      "rpi": 0.52,
-      "rpi_rank": 4,
-      "delta": -1,
+      "rpi": 0.524,
+      "rpi_rank": 3,
+      "delta": -2,
       "history": [
         {
           "date": "2026-03-25",
@@ -2756,9 +2756,9 @@
       "runs_allowed": 443,
       "runs_scored_per9": 4.53,
       "runs_allowed_per9": 3.82,
-      "rpi": 0.514,
-      "rpi_rank": 6,
-      "delta": 0,
+      "rpi": 0.516,
+      "rpi_rank": 7,
+      "delta": 1,
       "history": [
         {
           "date": "2026-03-25",
@@ -3304,9 +3304,9 @@
       "runs_allowed": 470,
       "runs_scored_per9": 4.45,
       "runs_allowed_per9": 4.09,
-      "rpi": 0.525,
-      "rpi_rank": 3,
-      "delta": -4,
+      "rpi": 0.527,
+      "rpi_rank": 2,
+      "delta": -5,
       "history": [
         {
           "date": "2026-03-25",
@@ -3852,7 +3852,7 @@
       "runs_allowed": 445,
       "runs_scored_per9": 4.5,
       "runs_allowed_per9": 3.87,
-      "rpi": 0.49,
+      "rpi": 0.492,
       "rpi_rank": 23,
       "delta": 15,
       "history": [
@@ -4400,9 +4400,9 @@
       "runs_allowed": 515,
       "runs_scored_per9": 4.38,
       "runs_allowed_per9": 4.44,
-      "rpi": 0.51,
-      "rpi_rank": 7,
-      "delta": -2,
+      "rpi": 0.508,
+      "rpi_rank": 9,
+      "delta": 0,
       "history": [
         {
           "date": "2026-03-25",
@@ -4948,9 +4948,9 @@
       "runs_allowed": 528,
       "runs_scored_per9": 4.55,
       "runs_allowed_per9": 4.51,
-      "rpi": 0.508,
-      "rpi_rank": 9,
-      "delta": -1,
+      "rpi": 0.509,
+      "rpi_rank": 8,
+      "delta": -2,
       "history": [
         {
           "date": "2026-03-25",
@@ -5497,8 +5497,8 @@
       "runs_scored_per9": 4.22,
       "runs_allowed_per9": 4.36,
       "rpi": 0.503,
-      "rpi_rank": 15,
-      "delta": 4,
+      "rpi_rank": 12,
+      "delta": 1,
       "history": [
         {
           "date": "2026-03-25",
@@ -6044,9 +6044,9 @@
       "runs_allowed": 568,
       "runs_scored_per9": 4.67,
       "runs_allowed_per9": 4.85,
-      "rpi": 0.49,
-      "rpi_rank": 22,
-      "delta": 10,
+      "rpi": 0.496,
+      "rpi_rank": 20,
+      "delta": 8,
       "history": [
         {
           "date": "2026-03-25",
@@ -7140,9 +7140,9 @@
       "runs_allowed": 489,
       "runs_scored_per9": 3.99,
       "runs_allowed_per9": 4.18,
-      "rpi": 0.504,
-      "rpi_rank": 13,
-      "delta": -1,
+      "rpi": 0.501,
+      "rpi_rank": 15,
+      "delta": 1,
       "history": [
         {
           "date": "2026-03-25",
@@ -7688,9 +7688,9 @@
       "runs_allowed": 514,
       "runs_scored_per9": 4.75,
       "runs_allowed_per9": 4.47,
-      "rpi": 0.503,
-      "rpi_rank": 14,
-      "delta": -1,
+      "rpi": 0.502,
+      "rpi_rank": 13,
+      "delta": -2,
       "history": [
         {
           "date": "2026-03-25",
@@ -8236,9 +8236,9 @@
       "runs_allowed": 570,
       "runs_scored_per9": 5.02,
       "runs_allowed_per9": 4.83,
-      "rpi": 0.509,
-      "rpi_rank": 8,
-      "delta": -8,
+      "rpi": 0.504,
+      "rpi_rank": 11,
+      "delta": -5,
       "history": [
         {
           "date": "2026-03-25",
@@ -8784,9 +8784,9 @@
       "runs_allowed": 511,
       "runs_scored_per9": 4.13,
       "runs_allowed_per9": 4.41,
-      "rpi": 0.495,
-      "rpi_rank": 19,
-      "delta": 2,
+      "rpi": 0.494,
+      "rpi_rank": 22,
+      "delta": 5,
       "history": [
         {
           "date": "2026-03-25",
@@ -9332,7 +9332,7 @@
       "runs_allowed": 474,
       "runs_scored_per9": 3.92,
       "runs_allowed_per9": 4.05,
-      "rpi": 0.489,
+      "rpi": 0.488,
       "rpi_rank": 24,
       "delta": 6,
       "history": [
@@ -9881,8 +9881,8 @@
       "runs_scored_per9": 4.32,
       "runs_allowed_per9": 4.32,
       "rpi": 0.501,
-      "rpi_rank": 16,
-      "delta": -3,
+      "rpi_rank": 14,
+      "delta": -5,
       "history": [
         {
           "date": "2026-03-25",
@@ -10428,7 +10428,7 @@
       "runs_allowed": 500,
       "runs_scored_per9": 4.31,
       "runs_allowed_per9": 4.35,
-      "rpi": 0.507,
+      "rpi": 0.508,
       "rpi_rank": 10,
       "delta": -10,
       "history": [
@@ -10976,9 +10976,9 @@
       "runs_allowed": 516,
       "runs_scored_per9": 3.9,
       "runs_allowed_per9": 4.41,
-      "rpi": 0.492,
-      "rpi_rank": 21,
-      "delta": 0,
+      "rpi": 0.498,
+      "rpi_rank": 17,
+      "delta": -4,
       "history": [
         {
           "date": "2026-03-25",
@@ -11524,7 +11524,7 @@
       "runs_allowed": 532,
       "runs_scored_per9": 4.17,
       "runs_allowed_per9": 4.55,
-      "rpi": 0.48,
+      "rpi": 0.486,
       "rpi_rank": 25,
       "delta": 3,
       "history": [
@@ -12072,9 +12072,9 @@
       "runs_allowed": 541,
       "runs_scored_per9": 4.17,
       "runs_allowed_per9": 4.7,
-      "rpi": 0.494,
-      "rpi_rank": 20,
-      "delta": -3,
+      "rpi": 0.496,
+      "rpi_rank": 19,
+      "delta": -4,
       "history": [
         {
           "date": "2026-03-25",
@@ -12620,9 +12620,9 @@
       "runs_allowed": 580,
       "runs_scored_per9": 4.68,
       "runs_allowed_per9": 4.96,
-      "rpi": 0.498,
-      "rpi_rank": 17,
-      "delta": -7,
+      "rpi": 0.495,
+      "rpi_rank": 21,
+      "delta": -3,
       "history": [
         {
           "date": "2026-03-25",
@@ -13168,7 +13168,7 @@
       "runs_allowed": 537,
       "runs_scored_per9": 4.17,
       "runs_allowed_per9": 4.63,
-      "rpi": 0.48,
+      "rpi": 0.481,
       "rpi_rank": 26,
       "delta": 1,
       "history": [
@@ -13716,9 +13716,9 @@
       "runs_allowed": 616,
       "runs_scored_per9": 5.32,
       "runs_allowed_per9": 5.22,
-      "rpi": 0.507,
-      "rpi_rank": 12,
-      "delta": -14,
+      "rpi": 0.5,
+      "rpi_rank": 16,
+      "delta": -10,
       "history": [
         {
           "date": "2026-03-25",
@@ -14264,7 +14264,7 @@
       "runs_allowed": 589,
       "runs_scored_per9": 4.14,
       "runs_allowed_per9": 5.03,
-      "rpi": 0.48,
+      "rpi": 0.476,
       "rpi_rank": 27,
       "delta": 0,
       "history": [
@@ -14812,9 +14812,9 @@
       "runs_allowed": 556,
       "runs_scored_per9": 4.15,
       "runs_allowed_per9": 4.79,
-      "rpi": 0.469,
-      "rpi_rank": 30,
-      "delta": 2,
+      "rpi": 0.468,
+      "rpi_rank": 29,
+      "delta": 1,
       "history": [
         {
           "date": "2026-03-25",
@@ -15360,9 +15360,9 @@
       "runs_allowed": 668,
       "runs_scored_per9": 4.3,
       "runs_allowed_per9": 5.76,
-      "rpi": 0.473,
-      "rpi_rank": 29,
-      "delta": 0,
+      "rpi": 0.465,
+      "rpi_rank": 30,
+      "delta": 1,
       "history": [
         {
           "date": "2026-03-25",
@@ -15908,7 +15908,7 @@
       "runs_allowed": 665,
       "runs_scored_per9": 4.79,
       "runs_allowed_per9": 5.73,
-      "rpi": 0.474,
+      "rpi": 0.473,
       "rpi_rank": 28,
       "delta": -2,
       "history": [
