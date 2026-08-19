@@ -28,6 +28,12 @@ function Run-Step($label, $scriptArgs) {
 Set-Location $Repo
 Log "Starting daily refresh in $Repo"
 
+$CurrentBranch = & $Git rev-parse --abbrev-ref HEAD
+if ($CurrentBranch -ne "master") {
+    Log "FAILED: repo is on branch '$CurrentBranch', not master - aborting so a stray feature branch doesn't silently eat the daily commit (it happened 2026-08-16 to 08-18: commits landed on 'edge-analysis' and the push failed with no upstream, and nobody noticed until the dashboard looked stale). Run 'git checkout master' in $Repo and re-run this script."
+    exit 1
+}
+
 Run-Step "fetch_history.py 2026"      @("scripts/fetch_history.py", "2026")
 Run-Step "backfill_pitchers.py"       @("scripts/backfill_pitchers.py")
 Run-Step "fetch_pitcher_stats.py"     @("scripts/fetch_pitcher_stats.py")
